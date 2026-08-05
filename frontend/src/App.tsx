@@ -2,81 +2,191 @@ import { useEffect, useState } from "react";
 import { FolderList } from "./components/FolderList";
 import { MessageList } from "./components/MessageList";
 import { AIPanel } from "./components/AIPanel";
+import { ReplyComposer } from "./components/ReplyComposer";
+import { DashboardView } from "./components/DashboardView";
+import { SettingsView } from "./components/SettingsView";
 import { api } from "./api/client";
-import type { MessageDetail, MessageSummary } from "./api/client";
+import type { MessageDetail, MessageHit, MessageSummary } from "./api/client";
+
+type View = "mail" | "dashboard" | "settings";
 
 export default function App() {
+  const [view, setView] = useState<View>("mail");
   const [folder, setFolder] = useState("INBOX");
   const [messages, setMessages] = useState<MessageSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedMessage, setSelectedMessage] = useState<MessageDetail | null>(null);
   const [dark, setDark] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches);
   const [backendError, setBackendError] = useState<string | null>(null);
+  const [replying, setReplying] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<MessageHit[] | null>(null);
+  const [searching, setSearching] = useState(false);
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
   }, [dark]);
 
-  useEffect(() => {
+  const reloadMessages = () => {
     api
       .listMessages(folder)
-      .then(setMessages)
-      .catch(() => setBackendError("バックエンドに接続できません。AIなしでも起動しているか確認してください。"));
+      .then((list) => {
+        setMessages(list);
+        setBackendError(null);
+      })
+      .catch(() => setBackendError("バックエンドに接続できません。backend/README の手順で起動してください。"));
+  };
+
+  useEffect(() => {
+    if (view !== "mail") return;
+    reloadMessages();
     setSelectedId(null);
     setSelectedMessage(null);
-  }, [folder]);
+    setSearchResults(null);
+  }, [folder, view]);
 
   useEffect(() => {
     if (!selectedId) return;
     api.getMessage(selectedId).then(setSelectedMessage).catch(() => setSelectedMessage(null));
+    setReplying(false);
   }, [selectedId]);
 
-  // Outlookライク・キーボードショートカット: j/k で前後移動、Escで選択解除。
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
-      const index = messages.findIndex((m) => m.id === selectedId);
+      const list = searchResults ?? messages;
+      const index = list.findIndex((m) => m.id === selectedId);
       if (e.key === "j") {
-        const next = messages[Math.min(index + 1, messages.length - 1)];
+        const next = list[Math.min(index + 1, list.length - 1)];
         if (next) setSelectedId(next.id);
       } else if (e.key === "k") {
-        const prev = messages[Math.max(index - 1, 0)];
+        const prev = list[Math.max(index - 1, 0)];
         if (prev) setSelectedId(prev.id);
       } else if (e.key === "Escape") {
         setSelectedId(null);
+        setReplying(false);
+      } else if (e.key === "r" && selectedId) {
+        setReplying(true);
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [messages, selectedId]);
+  }, [messages, searchResults, selectedId]);
+
+  const runSearch = async () => {
+    if (!searchQuery.trim()) {
+      setSearchResults(null);
+      return;
+    }
+    setSearching(true);
+    try {
+      const results = await api.search(searchQuery);
+      setSearchResults(results);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const displayedMessages: MessageSummary[] =
+    searchResults?.map((r) => ({
+      id: r.id,
+      account_id: "",
+      folder,
+      subject: r.subject,
+      sender_name: "",
+      sender_address: r.sender_address,
+      is_read: true,
+      is_flagged: false,
+      received_at: null,
+    })) ?? messages;
 
   return (
     <div className="app-shell">
       <header className="app-header">
         <span className="app-title">MailSort</span>
+        <nav className="view-nav">
+          <button className={view === "mail" ? "active" : ""} onClick={() => setView("mail")}>
+            メール
+          </button>
+          <button className={view === "dashboard" ? "active" : ""} onClick={() => setView("dashboard")}>
+            ダッシュボード
+          </button>
+          <button className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}>
+            設定
+          </button>
+        </nav>
+        {view === "mail" && (
+          <form
+            className="search-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              runSearch();
+            }}
+          >
+            <input
+              placeholder="メールを検索…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            <button type="submit" disabled={searching}>
+              {searching ? "検索中…" : "検索"}
+            </button>
+            {searchResults && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery("");
+                  setSearchResults(null);
+                }}
+              >
+                クリア
+              </button>
+            )}
+          </form>
+        )}
         {backendError && <span className="backend-warning">{backendError}</span>}
         <button className="theme-toggle" onClick={() => setDark((d) => !d)} aria-label="ダークモード切替">
           {dark ? "☀ ライト" : "🌙 ダーク"}
         </button>
       </header>
-      <div className="app-body">
-        <FolderList active={folder} onSelect={setFolder} />
-        <MessageList messages={messages} selectedId={selectedId} onSelect={setSelectedId} />
-        <section className="message-detail">
-          {selectedMessage ? (
-            <>
-              <h2>{selectedMessage.subject || "(件名なし)"}</h2>
-              <p className="detail-meta">
-                {selectedMessage.sender_name} &lt;{selectedMessage.sender_address}&gt;
-              </p>
-              <pre className="detail-body">{selectedMessage.body_text}</pre>
-            </>
-          ) : (
-            <p className="ai-empty">メールを選択してください（j/k で移動）</p>
-          )}
-        </section>
-        <AIPanel message={selectedMessage} />
-      </div>
+
+      {view === "dashboard" && <DashboardView />}
+      {view === "settings" && <SettingsView />}
+
+      {view === "mail" && (
+        <div className="app-body">
+          <FolderList active={folder} onSelect={setFolder} />
+          <MessageList messages={displayedMessages} selectedId={selectedId} onSelect={setSelectedId} />
+          <section className="message-detail">
+            {selectedMessage ? (
+              replying ? (
+                <ReplyComposer
+                  message={selectedMessage}
+                  onClose={() => setReplying(false)}
+                  onSent={() => {
+                    setReplying(false);
+                    reloadMessages();
+                  }}
+                />
+              ) : (
+                <>
+                  <div className="detail-toolbar">
+                    <h2>{selectedMessage.subject || "(件名なし)"}</h2>
+                    <button onClick={() => setReplying(true)}>返信（r）</button>
+                  </div>
+                  <p className="detail-meta">
+                    {selectedMessage.sender_name} &lt;{selectedMessage.sender_address}&gt;
+                  </p>
+                  <pre className="detail-body">{selectedMessage.body_text}</pre>
+                </>
+              )
+            ) : (
+              <p className="ai-empty">メールを選択してください（j/k で移動、r で返信）</p>
+            )}
+          </section>
+          <AIPanel message={selectedMessage} />
+        </div>
+      )}
     </div>
   );
 }

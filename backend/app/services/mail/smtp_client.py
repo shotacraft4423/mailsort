@@ -34,12 +34,17 @@ def send_message(
     host = account.smtp_host
     port = account.smtp_port or (465 if account.use_ssl else 587)
 
-    if account.use_ssl:
-        with smtplib.SMTP_SSL(host, port) as server:
-            server.login(account.email_address, password)
-            server.send_message(msg)
-    else:
-        with smtplib.SMTP(host, port) as server:
+    server_cls = smtplib.SMTP_SSL if account.use_ssl else smtplib.SMTP
+    with server_cls(host, port) as server:
+        server.ehlo()
+        # Only negotiate STARTTLS/AUTH when the server actually advertises
+        # them: real 587/465 mail providers always do, but this keeps the
+        # client usable against a plain internal relay too (and is what
+        # makes it testable against a bare aiosmtpd instance, see
+        # tests/test_smtp_client.py).
+        if not account.use_ssl and server.has_extn("starttls"):
             server.starttls()
+            server.ehlo()
+        if password and server.has_extn("auth"):
             server.login(account.email_address, password)
-            server.send_message(msg)
+        server.send_message(msg)

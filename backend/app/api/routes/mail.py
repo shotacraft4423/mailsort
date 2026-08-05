@@ -8,7 +8,10 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.db.models.ai import AIAnalysis
+from app.db.models.company import Company
+from app.db.models.deal import Candidate, Deal
 from app.db.models.email import EmailAccount, Message
+from app.db.models.meeting import Meeting
 from app.services.mail import smtp_client, sync_service
 
 router = APIRouter(prefix="/mail", tags=["mail"])
@@ -80,6 +83,80 @@ def get_message(message_id: str, db: Session = Depends(get_db)) -> MessageDetail
         classification=json.loads(analysis.classification_json) if analysis and analysis.classification_json else None,
         extraction=json.loads(analysis.extraction_json) if analysis and analysis.extraction_json else None,
         summary_3line=analysis.summary_3line if analysis else None,
+    )
+
+
+class RelatedCompanyOut(BaseModel):
+    id: str
+    name: str
+    evaluation: str | None
+    deal_count: int
+    candidate_count: int
+    last_contact_at: str | None
+
+    model_config = {"from_attributes": True}
+
+
+class RelatedOut(BaseModel):
+    company: RelatedCompanyOut | None
+    deals: list[dict]
+    candidates: list[dict]
+    meetings: list[dict]
+
+
+@router.get("/{message_id}/related", response_model=RelatedOut)
+def get_related(message_id: str, db: Session = Depends(get_db)) -> RelatedOut:
+    """Everything the AI panel's 会社情報/案件情報/人材情報/会議 tabs need for
+    one message, in a single round trip: the counterparty (matched by sender
+    domain) plus any Deal/Candidate/Meeting rows this message produced."""
+    message = db.query(Message).filter(Message.id == message_id).one_or_none()
+    if message is None:
+        raise HTTPException(status_code=404, detail="message not found")
+
+    company = None
+    if "@" in message.sender_address:
+        domain = message.sender_address.rsplit("@", 1)[-1].lower()
+        company = db.query(Company).filter(Company.domain == domain).one_or_none()
+
+    deals = db.query(Deal).filter(Deal.source_message_id == message_id).all()
+    candidates = db.query(Candidate).filter(Candidate.source_message_id == message_id).all()
+    meetings = db.query(Meeting).filter(Meeting.source_message_id == message_id).all()
+
+    return RelatedOut(
+        company=RelatedCompanyOut.model_validate(company) if company else None,
+        deals=[
+            {
+                "id": d.id,
+                "title": d.title,
+                "unit_price_min": d.unit_price_min,
+                "unit_price_max": d.unit_price_max,
+                "location": d.location,
+                "status": d.status,
+            }
+            for d in deals
+        ],
+        candidates=[
+            {
+                "id": c.id,
+                "display_name": c.display_name,
+                "unit_price_min": c.unit_price_min,
+                "unit_price_max": c.unit_price_max,
+                "location_preference": c.location_preference,
+                "status": c.status,
+            }
+            for c in candidates
+        ],
+        meetings=[
+            {
+                "id": m.id,
+                "title": m.title,
+                "platform": m.platform,
+                "join_url": m.join_url,
+                "starts_at": m.starts_at.isoformat() if m.starts_at else None,
+                "is_rescheduled": m.is_rescheduled,
+            }
+            for m in meetings
+        ],
     )
 
 

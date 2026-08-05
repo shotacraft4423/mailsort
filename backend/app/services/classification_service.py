@@ -51,6 +51,13 @@ def _build_user_prompt(message: Message, *, anonymize: bool) -> str:
         "本文:",
         body,
     ]
+    for attachment in message.attachments:
+        if not attachment.extracted_text:
+            continue
+        snippet = attachment.extracted_text[:1500]
+        if anonymize:
+            snippet = mask_text(snippet)
+        parts.append(f"\n添付ファイル「{attachment.file_name}」({attachment.classified_kind or '種別不明'})の抜粋:\n{snippet}")
     return "\n".join(parts)
 
 

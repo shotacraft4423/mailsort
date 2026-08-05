@@ -10,8 +10,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
   });
   if (!res.ok) {
-    throw new Error(`${init?.method ?? "GET"} ${path} failed: ${res.status}`);
+    let detail = "";
+    try {
+      detail = JSON.stringify(await res.json());
+    } catch {
+      // response body wasn't JSON; fall through with an empty detail
+    }
+    throw new Error(`${init?.method ?? "GET"} ${path} failed: ${res.status} ${detail}`);
   }
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 
@@ -44,21 +51,199 @@ export interface DashboardData {
   top_companies: { name: string; deal_count: number }[];
 }
 
+export interface AccountSummary {
+  id: string;
+  display_name: string;
+  email_address: string;
+  protocol: string;
+  is_active: boolean;
+  forced_llm_provider: string | null;
+}
+
+export interface AccountCreateInput {
+  display_name: string;
+  email_address: string;
+  protocol?: string;
+  imap_host?: string;
+  imap_port?: number;
+  smtp_host?: string;
+  smtp_port?: number;
+  use_ssl?: boolean;
+  password?: string;
+}
+
+export interface SettingsData {
+  app_name: string;
+  ai_enabled: boolean;
+  llm_provider: string;
+  embedding_provider: string;
+  openai_compatible_base_url: string;
+  openai_compatible_model: string;
+  anthropic_model: string;
+  anonymize_before_send: boolean;
+  duplicate_similarity_threshold: number;
+  available_llm_providers: string[];
+  has_openai_compatible_key: boolean;
+  has_anthropic_key: boolean;
+}
+
+export interface SettingsUpdateInput {
+  ai_enabled?: boolean;
+  llm_provider?: string;
+  embedding_provider?: string;
+  openai_compatible_base_url?: string;
+  openai_compatible_model?: string;
+  anthropic_model?: string;
+  anonymize_before_send?: boolean;
+  duplicate_similarity_threshold?: number;
+  openai_compatible_api_key?: string;
+  anthropic_api_key?: string;
+}
+
+export interface CompanySummary {
+  id: string;
+  name: string;
+  domain: string | null;
+  evaluation: string | null;
+  notes: string;
+  last_contact_at: string | null;
+  reply_rate: number | null;
+  deal_count: number;
+  candidate_count: number;
+  contract_count: number;
+}
+
+export interface CompanyDetail extends CompanySummary {
+  contacts: { id: string; name: string; email_address: string; phone: string | null; title: string | null }[];
+  deal_ids: string[];
+  candidate_ids: string[];
+}
+
+export interface DealSummary {
+  id: string;
+  title: string;
+  company_id: string | null;
+  location: string | null;
+  unit_price_min: number | null;
+  unit_price_max: number | null;
+  status: string;
+  duplicate_of_id: string | null;
+  duplicate_relation: string | null;
+}
+
+export interface CandidateSummary {
+  id: string;
+  display_name: string;
+  company_id: string | null;
+  location_preference: string | null;
+  unit_price_min: number | null;
+  unit_price_max: number | null;
+  status: string;
+  duplicate_of_id: string | null;
+  duplicate_relation: string | null;
+}
+
+export interface MeetingSummary {
+  id: string;
+  title: string;
+  platform: string;
+  join_url: string;
+  starts_at: string | null;
+  is_rescheduled: boolean;
+  supersedes_meeting_id: string | null;
+}
+
+export interface MessageHit {
+  id: string;
+  subject: string;
+  sender_address: string;
+}
+
+export interface RelatedData {
+  company: {
+    id: string;
+    name: string;
+    evaluation: string | null;
+    deal_count: number;
+    candidate_count: number;
+    last_contact_at: string | null;
+  } | null;
+  deals: {
+    id: string;
+    title: string;
+    unit_price_min: number | null;
+    unit_price_max: number | null;
+    location: string | null;
+    status: string;
+  }[];
+  candidates: {
+    id: string;
+    display_name: string;
+    unit_price_min: number | null;
+    unit_price_max: number | null;
+    location_preference: string | null;
+    status: string;
+  }[];
+  meetings: {
+    id: string;
+    title: string;
+    platform: string;
+    join_url: string;
+    starts_at: string | null;
+    is_rescheduled: boolean;
+  }[];
+}
+
 export const api = {
   listMessages: (folder = "INBOX") => request<MessageSummary[]>(`/mail?folder=${encodeURIComponent(folder)}`),
   getMessage: (id: string) => request<MessageDetail>(`/mail/${id}`),
+  getRelated: (id: string) => request<RelatedData>(`/mail/${id}/related`),
+  syncAccount: (accountId: string, folder = "INBOX") =>
+    request<MessageSummary[]>(`/mail/accounts/${accountId}/sync?folder=${encodeURIComponent(folder)}`, {
+      method: "POST",
+    }),
+  saveDraft: (input: { account_id: string; to: string[]; cc?: string[]; subject: string; body_text: string }) =>
+    request<MessageSummary>(`/mail/draft`, { method: "POST", body: JSON.stringify(input) }),
+  sendReply: (
+    messageId: string,
+    input: { to: string[]; cc?: string[]; subject: string; body_text: string; in_reply_to?: string }
+  ) => request<{ status: string }>(`/mail/${messageId}/send`, { method: "POST", body: JSON.stringify(input) }),
+
   classify: (id: string) => request(`/ai/messages/${id}/classify`, { method: "POST" }),
   summarize: (id: string, level: "3line" | "10line" | "detailed") =>
-    request(`/ai/messages/${id}/summarize`, { method: "POST", body: JSON.stringify({ level }) }),
+    request<{ level: string; summary: string }>(`/ai/messages/${id}/summarize`, {
+      method: "POST",
+      body: JSON.stringify({ level }),
+    }),
   suggestReply: (id: string, tone: string) =>
     request<{ tone: string; draft: string }>(`/ai/messages/${id}/reply-suggestion`, {
       method: "POST",
       body: JSON.stringify({ tone }),
     }),
+  replyTones: () => request<string[]>("/ai/reply-tones"),
   chat: (question: string) =>
     request<{ answer: string; source_message_ids: string[] }>(`/chat`, {
       method: "POST",
       body: JSON.stringify({ question }),
     }),
   dashboard: () => request<DashboardData>("/dashboard"),
+
+  listAccounts: () => request<AccountSummary[]>("/accounts"),
+  createAccount: (input: AccountCreateInput) =>
+    request<AccountSummary>("/accounts", { method: "POST", body: JSON.stringify(input) }),
+  deleteAccount: (id: string) => request<{ status: string }>(`/accounts/${id}`, { method: "DELETE" }),
+
+  getSettings: () => request<SettingsData>("/settings"),
+  updateSettings: (input: SettingsUpdateInput) =>
+    request<SettingsData>("/settings", { method: "PUT", body: JSON.stringify(input) }),
+
+  listCompanies: () => request<CompanySummary[]>("/companies"),
+  getCompany: (id: string) => request<CompanyDetail>(`/companies/${id}`),
+
+  listDeals: () => request<DealSummary[]>("/deals"),
+  listCandidates: () => request<CandidateSummary[]>("/candidates"),
+  listMeetings: () => request<MeetingSummary[]>("/meetings"),
+
+  search: (q: string) => request<MessageHit[]>(`/search?q=${encodeURIComponent(q)}`),
+  searchNatural: (q: string) => request<MessageHit[]>(`/search/natural?q=${encodeURIComponent(q)}`),
 };

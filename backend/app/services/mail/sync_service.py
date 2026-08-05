@@ -7,12 +7,14 @@ the queue until a provider is reachable.
 from __future__ import annotations
 
 import asyncio
+import os
 from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.db.models.email import Attachment, EmailAccount, Message
-from app.services import queue
+from app.services import attachment_analysis_service, queue
 from app.services.mail.imap_client import FetchedMessage, ImapConnector
 
 
@@ -35,14 +37,7 @@ async def sync_account(db: Session, account: EmailAccount, *, folder: str = "INB
         db.flush()
 
         for filename, content_type, data in item.attachments:
-            db.add(
-                Attachment(
-                    message_id=message.id,
-                    file_name=filename or "attachment",
-                    content_type=content_type,
-                    size_bytes=len(data),
-                )
-            )
+            _store_attachment(db, message, filename or "attachment", content_type, data)
 
         db.commit()
         db.refresh(message)
@@ -52,6 +47,32 @@ async def sync_account(db: Session, account: EmailAccount, *, folder: str = "INB
         queue.enqueue(db, message.id, "extract")
 
     return created
+
+
+def _store_attachment(db: Session, message: Message, file_name: str, content_type: str, data: bytes) -> Attachment:
+    """Writes the attachment to <data_dir>/attachments/<message_id>/ and runs
+    the (local, no-network) text-extraction + kind classification inline —
+    both are cheap enough not to need queueing, unlike LLM-backed tasks."""
+    settings = get_settings()
+    safe_name = os.path.basename(file_name) or "attachment"
+    message_dir = settings.ensure_data_dir() / "attachments" / message.id
+    message_dir.mkdir(parents=True, exist_ok=True)
+    storage_path = message_dir / safe_name
+    storage_path.write_bytes(data)
+
+    analysis = attachment_analysis_service.analyze(file_name=safe_name, content_type=content_type, data=data)
+
+    attachment = Attachment(
+        message_id=message.id,
+        file_name=safe_name,
+        content_type=content_type,
+        size_bytes=len(data),
+        storage_path=str(storage_path),
+        classified_kind=analysis.kind,
+        extracted_text=analysis.extracted_text or None,
+    )
+    db.add(attachment)
+    return attachment
 
 
 def _to_message(account_id: str, folder: str, item: FetchedMessage) -> Message:

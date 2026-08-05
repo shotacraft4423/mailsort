@@ -1,5 +1,5 @@
-import { useState } from "react";
-import type { MessageDetail } from "../api/client";
+import { useEffect, useState } from "react";
+import type { MessageDetail, RelatedData } from "../api/client";
 import { api } from "../api/client";
 
 type Tab = "summary" | "chat" | "company" | "deal" | "candidate" | "meeting";
@@ -19,6 +19,18 @@ interface Props {
 
 export function AIPanel({ message }: Props) {
   const [tab, setTab] = useState<Tab>("summary");
+  const [related, setRelated] = useState<RelatedData | null>(null);
+
+  useEffect(() => {
+    if (!message) {
+      setRelated(null);
+      return;
+    }
+    api
+      .getRelated(message.id)
+      .then(setRelated)
+      .catch(() => setRelated(null));
+  }, [message?.id]);
 
   return (
     <aside className="ai-panel" aria-label="AIパネル">
@@ -39,10 +51,10 @@ export function AIPanel({ message }: Props) {
         {!message && <p className="ai-empty">メールを選択してください</p>}
         {message && tab === "summary" && <SummaryTab message={message} />}
         {message && tab === "chat" && <ChatTab />}
-        {message && tab === "company" && <PlaceholderTab label="会社情報" />}
-        {message && tab === "deal" && <PlaceholderTab label="案件情報" />}
-        {message && tab === "candidate" && <PlaceholderTab label="人材情報" />}
-        {message && tab === "meeting" && <PlaceholderTab label="会議" />}
+        {message && tab === "company" && <CompanyTab related={related} />}
+        {message && tab === "deal" && <DealTab related={related} />}
+        {message && tab === "candidate" && <CandidateTab related={related} />}
+        {message && tab === "meeting" && <MeetingTab related={related} />}
       </div>
     </aside>
   );
@@ -59,7 +71,7 @@ function SummaryTab({ message }: { message: MessageDetail }) {
     setLevel(nextLevel);
     setLoading(true);
     try {
-      const result = (await api.summarize(message.id, nextLevel)) as { summary: string };
+      const result = await api.summarize(message.id, nextLevel);
       setSummary(result.summary);
     } finally {
       setLoading(false);
@@ -122,6 +134,84 @@ function ChatTab() {
   );
 }
 
-function PlaceholderTab({ label }: { label: string }) {
-  return <p className="ai-empty">{label}パネルは今後実装予定です。</p>;
+function CompanyTab({ related }: { related: RelatedData | null }) {
+  if (!related) return <p className="ai-empty">読み込み中…</p>;
+  const company = related.company;
+  if (!company) return <p className="ai-empty">送信元ドメインに一致する会社情報がまだありません。</p>;
+
+  return (
+    <dl className="related-info">
+      <dt>会社名</dt>
+      <dd>{company.name}</dd>
+      <dt>評価</dt>
+      <dd>{company.evaluation ?? "未評価"}</dd>
+      <dt>案件数</dt>
+      <dd>{company.deal_count}</dd>
+      <dt>人材数</dt>
+      <dd>{company.candidate_count}</dd>
+      <dt>最終連絡日</dt>
+      <dd>{company.last_contact_at ? new Date(company.last_contact_at).toLocaleDateString("ja-JP") : "-"}</dd>
+    </dl>
+  );
+}
+
+function DealTab({ related }: { related: RelatedData | null }) {
+  if (!related) return <p className="ai-empty">読み込み中…</p>;
+  if (related.deals.length === 0) return <p className="ai-empty">このメールから抽出された案件はまだありません。</p>;
+
+  return (
+    <ul className="related-list">
+      {related.deals.map((d) => (
+        <li key={d.id}>
+          <strong>{d.title}</strong>
+          <div className="related-list-meta">
+            {d.location ?? "勤務地未設定"} / {d.unit_price_min ?? "?"}〜{d.unit_price_max ?? "?"}万円 / {d.status}
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function CandidateTab({ related }: { related: RelatedData | null }) {
+  if (!related) return <p className="ai-empty">読み込み中…</p>;
+  if (related.candidates.length === 0) return <p className="ai-empty">このメールから抽出された人材はまだありません。</p>;
+
+  return (
+    <ul className="related-list">
+      {related.candidates.map((c) => (
+        <li key={c.id}>
+          <strong>{c.display_name}</strong>
+          <div className="related-list-meta">
+            {c.location_preference ?? "希望勤務地未設定"} / {c.unit_price_min ?? "?"}〜{c.unit_price_max ?? "?"}万円 /{" "}
+            {c.status}
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function MeetingTab({ related }: { related: RelatedData | null }) {
+  if (!related) return <p className="ai-empty">読み込み中…</p>;
+  if (related.meetings.length === 0) return <p className="ai-empty">このメールから抽出された会議はまだありません。</p>;
+
+  return (
+    <ul className="related-list">
+      {related.meetings.map((m) => (
+        <li key={m.id}>
+          <strong>{m.platform.toUpperCase()}</strong>{" "}
+          {m.is_rescheduled && <span className="badge-reschedule">再設定</span>}
+          <div className="related-list-meta">
+            {m.starts_at ? new Date(m.starts_at).toLocaleString("ja-JP") : "日時未確定"}
+          </div>
+          {m.join_url && (
+            <a href={m.join_url} target="_blank" rel="noreferrer">
+              {m.join_url}
+            </a>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
 }
