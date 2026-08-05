@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -27,7 +29,7 @@ class CompanyOut(BaseModel):
     domain: str | None
     evaluation: str | None
     notes: str
-    last_contact_at: str | None
+    last_contact_at: datetime | None
     reply_rate: float | None
     deal_count: int
     candidate_count: int

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
-from app.db.models.ai import AIAnalysis
+from app.db.models.ai import AIAnalysis, AuditLogEntry
 from app.db.models.company import Company
 from app.db.models.deal import Candidate, Deal
 from app.db.models.email import EmailAccount, Message
@@ -26,7 +27,7 @@ class MessageOut(BaseModel):
     sender_address: str
     is_read: bool
     is_flagged: bool
-    received_at: str | None
+    received_at: datetime | None
 
     model_config = {"from_attributes": True}
 
@@ -104,7 +105,7 @@ class RelatedCompanyOut(BaseModel):
     evaluation: str | None
     deal_count: int
     candidate_count: int
-    last_contact_at: str | None
+    last_contact_at: datetime | None
 
     model_config = {"from_attributes": True}
 
@@ -169,6 +170,31 @@ def get_related(message_id: str, db: Session = Depends(get_db)) -> RelatedOut:
             }
             for m in meetings
         ],
+    )
+
+
+class AuditLogEntryOut(BaseModel):
+    id: str
+    action: str
+    provider_used: str
+    rationale: str
+    data_sent_summary: str
+    anonymized: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+@router.get("/{message_id}/audit-log", response_model=list[AuditLogEntryOut])
+def get_audit_log(message_id: str, db: Session = Depends(get_db)) -> list[AuditLogEntry]:
+    """"AIがなぜこのメールをこう判断したか" — every AI decision made about
+    this message (classification, extraction, rule fires, ...), newest
+    first, so a user can see the rationale and what data was sent."""
+    return (
+        db.query(AuditLogEntry)
+        .filter(AuditLogEntry.message_id == message_id)
+        .order_by(AuditLogEntry.created_at.desc())
+        .all()
     )
 
 

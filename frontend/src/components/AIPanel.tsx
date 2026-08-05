@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { MessageDetail, RelatedData } from "../api/client";
+import type { AuditLogEntry, MessageDetail, RelatedData } from "../api/client";
 import { api } from "../api/client";
 
 type Tab = "summary" | "chat" | "company" | "deal" | "candidate" | "meeting";
@@ -97,6 +97,53 @@ function SummaryTab({ message }: { message: MessageDetail }) {
             </span>
           ))}
         </div>
+      )}
+
+      <AuditLogSection messageId={message.id} />
+    </div>
+  );
+}
+
+function AuditLogSection({ messageId }: { messageId: string }) {
+  const [entries, setEntries] = useState<AuditLogEntry[] | null>(null);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    setEntries(null);
+    setExpanded(false);
+  }, [messageId]);
+
+  const load = () => {
+    setExpanded(true);
+    if (entries === null) {
+      api.getAuditLog(messageId).then(setEntries).catch(() => setEntries([]));
+    }
+  };
+
+  return (
+    <div className="audit-log-section">
+      <button className="audit-log-toggle" onClick={() => (expanded ? setExpanded(false) : load())}>
+        {expanded ? "AI判断根拠を隠す" : "AI判断根拠を表示"}
+      </button>
+      {expanded && (
+        <ul className="audit-log-list">
+          {entries === null && <li className="ai-empty">読み込み中…</li>}
+          {entries?.length === 0 && <li className="ai-empty">このメールに対するAI判断ログはまだありません。</li>}
+          {entries?.map((e) => (
+            <li key={e.id}>
+              <div className="audit-log-header">
+                <span className="task-badge">{e.action}</span>
+                <span className="task-badge">{e.provider_used}</span>
+                <span className="related-list-meta">{new Date(e.created_at).toLocaleString("ja-JP")}</span>
+              </div>
+              <p className="audit-log-rationale">{e.rationale}</p>
+              <p className="related-list-meta">
+                送信データ: {e.data_sent_summary}
+                {e.anonymized ? "" : "（匿名化なし）"}
+              </p>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

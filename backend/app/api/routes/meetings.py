@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -15,7 +17,7 @@ class MeetingOut(BaseModel):
     title: str
     platform: str
     join_url: str
-    starts_at: str | None
+    starts_at: datetime | None
     is_rescheduled: bool
     supersedes_meeting_id: str | None
 

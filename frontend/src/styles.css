@@ -626,6 +626,48 @@ body {
   margin-top: 2px;
 }
 
+.audit-log-section {
+  margin-top: 16px;
+}
+
+.audit-log-toggle {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.audit-log-list {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.audit-log-list li {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.audit-log-header {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.audit-log-rationale {
+  margin: 4px 0;
+  line-height: 1.5;
+}
+
 .match-finder {
   margin-top: 8px;
 }

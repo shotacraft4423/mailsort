@@ -168,6 +168,16 @@ export interface MessageHit {
   sender_address: string;
 }
 
+export interface AuditLogEntry {
+  id: string;
+  action: string;
+  provider_used: string;
+  rationale: string;
+  data_sent_summary: string;
+  anonymized: boolean;
+  created_at: string;
+}
+
 export interface RelatedData {
   company: {
     id: string;
@@ -268,6 +278,7 @@ export const api = {
   listMessages: (folder = "INBOX") => request<MessageSummary[]>(`/mail?folder=${encodeURIComponent(folder)}`),
   getMessage: (id: string) => request<MessageDetail>(`/mail/${id}`),
   getRelated: (id: string) => request<RelatedData>(`/mail/${id}/related`),
+  getAuditLog: (id: string) => request<AuditLogEntry[]>(`/mail/${id}/audit-log`),
   syncAccount: (accountId: string, folder = "INBOX") =>
     request<MessageSummary[]>(`/mail/accounts/${accountId}/sync?folder=${encodeURIComponent(folder)}`, {
       method: "POST",
