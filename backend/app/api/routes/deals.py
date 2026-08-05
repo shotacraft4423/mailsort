@@ -7,8 +7,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
+from app.db.models.company import Company
 from app.db.models.deal import Candidate, Deal, MatchScore
-from app.services.duplicate_detection_service import find_duplicate_deals
+from app.services.duplicate_detection_service import find_duplicate_deals, persist_deal_duplicates
 from app.services.matching_service import find_matches_for_deal
 
 router = APIRouter(prefix="/deals", tags=["deals"])
@@ -75,10 +76,50 @@ async def find_duplicates(deal_id: str, db: Session = Depends(get_db)) -> list[d
     if deal is None:
         raise HTTPException(status_code=404, detail="deal not found")
     matches = await find_duplicate_deals(db, deal)
+    persist_deal_duplicates(db, deal, matches)
     return [
         {"other_id": m.other_id, "similarity": m.similarity, "relation": m.relation, "reason": m.reason}
         for m in matches
     ]
+
+
+@router.get("/{deal_id}/network")
+def get_network(deal_id: str, db: Session = Depends(get_db)) -> dict:
+    """重複案件ネットワーク表示: the full duplicate cluster this deal belongs
+    to (itself if it's the cluster root, or its root + siblings otherwise),
+    with company name and price per member so the UI can show how many
+    companies are distributing what looks like the same opportunity."""
+    deal = db.query(Deal).filter(Deal.id == deal_id).one_or_none()
+    if deal is None:
+        raise HTTPException(status_code=404, detail="deal not found")
+
+    root_id = deal.duplicate_of_id or deal.id
+    root = db.query(Deal).filter(Deal.id == root_id).one_or_none()
+    members = db.query(Deal).filter(Deal.duplicate_of_id == root_id).all()
+    if root is None:
+        return {"root_id": root_id, "nodes": [], "company_count": 0}
+
+    all_deals = [root, *members]
+    company_ids = {d.company_id for d in all_deals if d.company_id}
+    companies = {c.id: c.name for c in db.query(Company).filter(Company.id.in_(company_ids)).all()}
+
+    def to_node(d: Deal, *, is_root: bool) -> dict:
+        return {
+            "id": d.id,
+            "title": d.title,
+            "company_name": companies.get(d.company_id, "不明な会社"),
+            "unit_price_min": d.unit_price_min,
+            "unit_price_max": d.unit_price_max,
+            "business_flow": d.business_flow,
+            "relation": "root" if is_root else (d.duplicate_relation or "candidate"),
+        }
+
+    nodes = [to_node(root, is_root=True)] + [to_node(m, is_root=False) for m in members]
+    return {
+        "root_id": root_id,
+        "nodes": nodes,
+        "company_count": len({n["company_name"] for n in nodes}),
+    }
 
 
 @router.post("/{deal_id}/find-matches")

@@ -255,6 +255,22 @@ export interface Rule {
   actions: RuleAction[];
 }
 
+export interface DealNetworkNode {
+  id: string;
+  title: string;
+  company_name: string;
+  unit_price_min: number | null;
+  unit_price_max: number | null;
+  business_flow: string | null;
+  relation: "root" | "exact" | "candidate";
+}
+
+export interface DealNetwork {
+  root_id: string;
+  nodes: DealNetworkNode[];
+  company_count: number;
+}
+
 export interface DealMatch {
   candidate_id: string;
   candidate_name?: string;
@@ -351,6 +367,12 @@ export const api = {
     request<Rule>("/rules", { method: "POST", body: JSON.stringify(input) }),
   toggleRule: (id: string) => request<Rule>(`/rules/${id}/toggle`, { method: "PATCH" }),
 
+  findDealDuplicates: (dealId: string) =>
+    request<{ other_id: string; similarity: number; relation: string; reason: string }[]>(
+      `/deals/${dealId}/find-duplicates`,
+      { method: "POST" }
+    ),
+  getDealNetwork: (dealId: string) => request<DealNetwork>(`/deals/${dealId}/network`),
   findDealMatches: (dealId: string) => request<DealMatch[]>(`/deals/${dealId}/find-matches`, { method: "POST" }),
   findCandidateMatches: (candidateId: string) =>
     request<CandidateMatch[]>(`/candidates/${candidateId}/find-matches`, { method: "POST" }),

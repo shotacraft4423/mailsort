@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import zipfile
 
 from app.services import attachment_analysis_service as svc
 
@@ -61,6 +62,54 @@ def test_extract_text_invalid_pdf_bytes_returns_empty_string_not_raise():
 def test_extract_text_plain_text_uses_utf8_decode():
     text = svc.extract_text(file_name="notes.txt", content_type="text/plain", data="メモ書き".encode("utf-8"))
     assert text == "メモ書き"
+
+
+def test_extract_text_zip_recurses_into_members():
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("メモ.txt", "Java案件の候補者リストです")
+        archive.writestr("請求書.txt", "請求書 合計 300,000円")
+
+    text = svc.extract_text(file_name="資料.zip", content_type="application/zip", data=buffer.getvalue())
+    assert "Java案件の候補者リストです" in text
+    assert "300,000円" in text
+    assert "=== メモ.txt ===" in text
+
+
+def test_extract_text_zip_resolved_by_extension_when_content_type_missing():
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("notes.txt", "hello from inside the zip")
+
+    text = svc.extract_text(file_name="archive.zip", content_type="application/octet-stream", data=buffer.getvalue())
+    assert "hello from inside the zip" in text
+
+
+def test_extract_text_invalid_zip_bytes_returns_empty_string_not_raise():
+    text = svc.extract_text(file_name="broken.zip", content_type="application/zip", data=b"not a real zip")
+    assert text == ""
+
+
+def test_extract_text_zip_skips_members_beyond_max_count(monkeypatch):
+    monkeypatch.setattr(svc, "_MAX_ZIP_MEMBERS", 2)
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        for i in range(5):
+            archive.writestr(f"file_{i}.txt", f"content {i}")
+
+    text = svc.extract_text(file_name="many.zip", content_type="application/zip", data=buffer.getvalue())
+    included = sum(1 for i in range(5) if f"content {i}" in text)
+    assert included == 2
+
+
+def test_analyze_classifies_kind_from_zip_member_content():
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("doc.txt", "本書は基本契約書として締結する")
+
+    result = svc.analyze(file_name="書類.zip", content_type="application/zip", data=buffer.getvalue())
+    assert result.kind == "contract"
 
 
 def test_analyze_returns_kind_and_text_together():

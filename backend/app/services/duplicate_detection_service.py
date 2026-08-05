@@ -117,6 +117,50 @@ async def find_duplicate_candidates(
     return matches
 
 
+def persist_deal_duplicates(db: Session, deal: Deal, matches: list[DuplicateMatch]) -> None:
+    """Writes exact/candidate matches onto Deal.duplicate_of_id so a cluster
+    can be queried back later (GET /deals/{id}/network — "重複案件ネットワーク
+    表示"). find_duplicate_deals itself stays pure/side-effect-free (it's
+    also called ad hoc without wanting to mutate the DB); this is opt-in,
+    called from the API route after a search.
+
+    Simplified union: whichever deal already has a cluster (its own id, if
+    none) becomes every match's `duplicate_of_id`. A deal that's already
+    linked to a different cluster is left alone rather than silently
+    reassigned — clusters can undershoot (miss a merge) but never produce a
+    contradictory double assignment.
+    """
+    root_id = deal.duplicate_of_id or deal.id
+    linked_any = False
+    for match in matches:
+        if match.relation not in ("exact", "candidate"):
+            continue
+        other = db.query(Deal).filter(Deal.id == match.other_id).one_or_none()
+        if other is None or other.id == root_id or other.duplicate_of_id is not None:
+            continue
+        other.duplicate_of_id = root_id
+        other.duplicate_relation = match.relation
+        linked_any = True
+    if linked_any:
+        db.commit()
+
+
+def persist_candidate_duplicates(db: Session, candidate: Candidate, matches: list[DuplicateMatch]) -> None:
+    root_id = candidate.duplicate_of_id or candidate.id
+    linked_any = False
+    for match in matches:
+        if match.relation not in ("exact", "candidate"):
+            continue
+        other = db.query(Candidate).filter(Candidate.id == match.other_id).one_or_none()
+        if other is None or other.id == root_id or other.duplicate_of_id is not None:
+            continue
+        other.duplicate_of_id = root_id
+        other.duplicate_relation = match.relation
+        linked_any = True
+    if linked_any:
+        db.commit()
+
+
 async def _verify_relation(*, kind: str, a: str, b: str) -> tuple[DuplicateRelation, str]:
     """Ask the LLM to distinguish "same opportunity, different sales
     channel/price" (candidate) from "genuinely the same posting" (exact)

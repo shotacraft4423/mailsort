@@ -6,13 +6,17 @@ service can feed the extracted text into its prompt context.
 Image OCR (名刺OCR含む) needs a `pytesseract` + Tesseract binary install
 that isn't guaranteed to be present on every machine; `extract_text` degrades
 gracefully (returns "") when the OCR stack is missing rather than raising,
-so attachment ingestion never blocks on it. Zip-file recursion is a Phase 2
-item (would unzip into a temp dir and re-run this same function per member).
+so attachment ingestion never blocks on it. Zip attachments are unpacked
+in-memory and each member re-runs through this same extraction/classification
+logic (one level deep — a zip inside a zip is left as opaque bytes, both to
+bound the work done per attachment and because SES mail practically never
+nests archives).
 """
 from __future__ import annotations
 
 import io
 import re
+import zipfile
 from dataclasses import dataclass
 
 AttachmentKind = str  # skill_sheet | project_brief | invoice | contract | resume | other
@@ -86,12 +90,50 @@ def _extract_image_ocr(data: bytes) -> str:
         return ""
 
 
+# Zip-bomb / pathological-archive guards: a malicious or just very large zip
+# must not blow up memory or ingestion time. Members beyond these limits are
+# silently skipped rather than raising, consistent with every other
+# extractor here degrading instead of failing ingestion.
+_MAX_ZIP_MEMBERS = 20
+_MAX_ZIP_MEMBER_BYTES = 10 * 1024 * 1024
+_MAX_ZIP_TOTAL_OUTPUT_CHARS = 50_000
+
+
+def _extract_zip(data: bytes) -> str:
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile:
+        return ""
+
+    sections: list[str] = []
+    total_chars = 0
+    with archive:
+        members = [info for info in archive.infolist() if not info.is_dir()][:_MAX_ZIP_MEMBERS]
+        for info in members:
+            if info.file_size > _MAX_ZIP_MEMBER_BYTES or total_chars >= _MAX_ZIP_TOTAL_OUTPUT_CHARS:
+                continue
+            try:
+                member_data = archive.read(info)
+            except (zipfile.BadZipFile, RuntimeError):  # RuntimeError: e.g. password-protected member
+                continue
+            member_text = extract_text(file_name=info.filename, content_type="", data=member_data)
+            if not member_text:
+                continue
+            section = f"=== {info.filename} ===\n{member_text}"
+            sections.append(section)
+            total_chars += len(section)
+
+    return "\n\n".join(sections)
+
+
 _EXTRACTORS = {
     "application/pdf": _extract_pdf,
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": _extract_docx,
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": _extract_xlsx,
     "image/png": _extract_image_ocr,
     "image/jpeg": _extract_image_ocr,
+    "application/zip": _extract_zip,
+    "application/x-zip-compressed": _extract_zip,  # common alternate MIME type from Windows senders
 }
 
 _EXTENSION_CONTENT_TYPE = {
@@ -101,6 +143,9 @@ _EXTENSION_CONTENT_TYPE = {
     ".png": "image/png",
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
+    ".zip": "application/zip",
+    ".txt": "text/plain",
+    ".csv": "text/plain",
 }
 
 

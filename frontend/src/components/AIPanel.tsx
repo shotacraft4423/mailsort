@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { AuditLogEntry, MessageDetail, RelatedData } from "../api/client";
+import type { AuditLogEntry, DealNetwork, MessageDetail, RelatedData } from "../api/client";
 import { api } from "../api/client";
 
 type Tab = "summary" | "chat" | "company" | "deal" | "candidate" | "meeting";
@@ -288,9 +288,93 @@ function DealTab({ related }: { related: RelatedData | null }) {
             {d.location ?? "勤務地未設定"} / {d.unit_price_min ?? "?"}〜{d.unit_price_max ?? "?"}万円 / {d.status}
           </div>
           <MatchFinder kind="deal" id={d.id} />
+          <DuplicateNetwork dealId={d.id} />
         </li>
       ))}
     </ul>
+  );
+}
+
+function DuplicateNetwork({ dealId }: { dealId: string }) {
+  const [network, setNetwork] = useState<DealNetwork | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      await api.findDealDuplicates(dealId); // detect + persist relations first
+      const result = await api.getDealNetwork(dealId);
+      setNetwork(result);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="match-finder">
+      <button onClick={load} disabled={loading}>
+        {loading ? "検索中…" : "重複案件ネットワークを確認"}
+      </button>
+      {network && network.nodes.length <= 1 && (
+        <p className="ai-empty">同一案件と思われる他社案件は見つかりませんでした。</p>
+      )}
+      {network && network.nodes.length > 1 && <DuplicateNetworkDiagram network={network} />}
+    </div>
+  );
+}
+
+function DuplicateNetworkDiagram({ network }: { network: DealNetwork }) {
+  const size = 260;
+  const center = size / 2;
+  const radius = 92;
+  const root = network.nodes.find((n) => n.relation === "root") ?? network.nodes[0];
+  const spokes = network.nodes.filter((n) => n.id !== root.id);
+
+  const positions = spokes.map((node, i) => {
+    const angle = (2 * Math.PI * i) / spokes.length - Math.PI / 2;
+    return { node, x: center + radius * Math.cos(angle), y: center + radius * Math.sin(angle) };
+  });
+
+  const priceLabel = (n: DealNetwork["nodes"][number]) =>
+    n.unit_price_min || n.unit_price_max ? `${n.unit_price_min ?? "?"}〜${n.unit_price_max ?? "?"}万円` : "単価不明";
+
+  // Company names don't fit inside a ~35px circle, so nodes carry a short
+  // index (0 = root) and the legend list below maps index -> full name.
+  const indexOf = new Map<string, number>([[root.id, 0], ...spokes.map((n, i) => [n.id, i + 1] as const)]);
+
+  return (
+    <div className="duplicate-network">
+      <p className="related-list-meta">{network.company_count}社が同一案件と思われる情報を配信しています。</p>
+      <svg viewBox={`0 0 ${size} ${size}`} role="img" aria-label="重複案件ネットワーク図" className="duplicate-network-svg">
+        {positions.map(({ node, x, y }) => (
+          <line key={`line-${node.id}`} x1={center} y1={center} x2={x} y2={y} className="network-edge" />
+        ))}
+        <circle cx={center} cy={center} r={22} className="network-node network-node-root" />
+        <text x={center} y={center + 4} textAnchor="middle" className="network-node-label">
+          0
+        </text>
+        {positions.map(({ node, x, y }) => (
+          <g key={node.id}>
+            <circle cx={x} cy={y} r={18} className={`network-node network-node-${node.relation}`} />
+            <text x={x} y={y + 4} textAnchor="middle" className="network-node-label">
+              {indexOf.get(node.id)}
+            </text>
+          </g>
+        ))}
+      </svg>
+      <ul className="duplicate-network-legend">
+        {network.nodes.map((n) => (
+          <li key={n.id}>
+            <strong>
+              [{indexOf.get(n.id)}] {n.company_name}
+            </strong>
+            <span className="related-list-meta">
+              {priceLabel(n)} / {n.business_flow ?? "商流不明"} / {n.relation === "root" ? "基準" : n.relation}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

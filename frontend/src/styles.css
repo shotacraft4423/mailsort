@@ -657,6 +657,60 @@ body {
   cursor: pointer;
 }
 
+.duplicate-network {
+  margin-top: 10px;
+}
+
+.duplicate-network-svg {
+  width: 100%;
+  max-width: 260px;
+  height: auto;
+}
+
+.network-edge {
+  stroke: var(--border);
+  stroke-width: 1.5;
+}
+
+.network-node {
+  stroke: var(--bg);
+  stroke-width: 2;
+}
+
+.network-node-root {
+  fill: var(--accent);
+}
+
+.network-node-exact {
+  fill: #d13438;
+}
+
+.network-node-candidate {
+  fill: #8a8886;
+}
+
+.network-node-label {
+  font-size: 8px;
+  fill: white;
+  pointer-events: none;
+}
+
+.duplicate-network-legend {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.duplicate-network-legend li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
 .audit-log-section {
   margin-top: 16px;
 }
