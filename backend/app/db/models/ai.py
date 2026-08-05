@@ -90,6 +90,24 @@ class AuditLogEntry(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)  # reserved for multi-user (Phase 3)
 
 
+class ClassificationFeedback(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """AI学習モード: a user correcting "これは案件" / "これは人材" etc. Stored
+    as (fingerprint text, corrected label) pairs rather than fine-tuned
+    weights — no training infrastructure required. See
+    services/feedback_service.py: future classification calls retrieve the
+    most similar past corrections by embedding similarity and inject them
+    as few-shot examples, so accuracy improves from user feedback without
+    ever calling out to a training API."""
+
+    __tablename__ = "classification_feedback"
+
+    message_id: Mapped[str] = mapped_column(String(36), ForeignKey("messages.id"), index=True)
+    fingerprint_text: Mapped[str] = mapped_column(Text)  # subject + body snippet, used for similarity search
+    original_mail_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    corrected_mail_type: Mapped[str] = mapped_column(String(64))
+    note: Mapped[str] = mapped_column(Text, default="")
+
+
 class AnalysisQueueItem(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     """DB-backed background job queue (see services/queue.py). Swappable for
     Celery+Redis at commercial scale without changing the producer API."""

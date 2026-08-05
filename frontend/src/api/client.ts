@@ -307,6 +307,11 @@ export const api = {
       body: JSON.stringify({ tone }),
     }),
   replyTones: () => request<string[]>("/ai/reply-tones"),
+  correctClassification: (id: string, correctedMailType: string, note = "") =>
+    request<{ id: string; corrected_mail_type: string }>(`/ai/messages/${id}/correct-classification`, {
+      method: "POST",
+      body: JSON.stringify({ corrected_mail_type: correctedMailType, note }),
+    }),
   chat: (question: string) =>
     request<{ answer: string; source_message_ids: string[] }>(`/chat`, {
       method: "POST",

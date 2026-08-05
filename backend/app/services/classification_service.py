@@ -21,6 +21,7 @@ from app.providers.llm.base import LLMProviderError
 from app.providers.llm.local_mock import LocalMockProvider
 from app.providers.llm.registry import get_llm_provider
 from app.schemas.classification import ClassificationResult
+from app.services.feedback_service import build_few_shot_suffix, get_similar_corrections
 from app.services.prompt_service import get_active_prompt, render_template, truncate_for_ai
 
 TASK = "classification"
@@ -102,6 +103,7 @@ async def classify_message(db: Session, message: Message, *, force: bool = False
     user_template = active_prompt.user_prompt_template if active_prompt else DEFAULT_USER_PROMPT_TEMPLATE
     context = build_context(message, anonymize=settings.anonymize_before_send)
     user_prompt = render_template(user_template, context)
+    user_prompt += build_few_shot_suffix(await get_similar_corrections(db, message))
 
     provider = get_llm_provider()
     is_fallback = False

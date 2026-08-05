@@ -31,6 +31,7 @@ from app.providers.llm.registry import get_llm_provider
 from app.schemas.classification import ClassificationResult
 from app.schemas.extraction import ExtractionResult
 from app.services import classification_service, extraction_service
+from app.services.feedback_service import build_few_shot_suffix, get_similar_corrections
 from app.services.prompt_service import get_active_prompt, render_template
 
 # Matched by LocalMockProvider to return a combined stub shape instead of
@@ -95,6 +96,7 @@ async def analyze_message(db: Session, message: Message, *, force: bool = False)
     )
     context = classification_service.build_context(message, anonymize=settings.anonymize_before_send)
     user_prompt = render_template(user_template, context)
+    user_prompt += build_few_shot_suffix(await get_similar_corrections(db, message))
 
     provider = get_llm_provider()
     is_fallback = False

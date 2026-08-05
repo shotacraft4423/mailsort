@@ -10,6 +10,7 @@ from app.services import (
     analysis_service,
     classification_service,
     extraction_service,
+    feedback_service,
     queue,
     reply_suggestion_service,
     summarization_service,
@@ -85,6 +86,22 @@ async def reply_suggestion(message_id: str, payload: ReplyRequest, db: Session =
     message = _get_message(db, message_id)
     draft = await reply_suggestion_service.suggest_reply(db, message, payload.tone, style_hint=payload.style_hint)
     return {"tone": payload.tone, "draft": draft}
+
+
+class CorrectClassificationRequest(BaseModel):
+    corrected_mail_type: str
+    note: str = ""
+
+
+@router.post("/messages/{message_id}/correct-classification")
+def correct_classification(message_id: str, payload: CorrectClassificationRequest, db: Session = Depends(get_db)) -> dict:
+    """AI学習モード: records a user correction ("これは案件" etc.), applies it
+    to the message's current classification immediately, and makes it
+    available as a few-shot example for future similar emails — see
+    services/feedback_service.py."""
+    message = _get_message(db, message_id)
+    feedback = feedback_service.record_correction(db, message, payload.corrected_mail_type, note=payload.note)
+    return {"id": feedback.id, "corrected_mail_type": feedback.corrected_mail_type}
 
 
 @router.get("/reply-tones")

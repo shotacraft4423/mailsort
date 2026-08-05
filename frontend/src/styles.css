@@ -626,6 +626,37 @@ body {
   margin-top: 2px;
 }
 
+.category-correction {
+  margin-top: 12px;
+}
+
+.category-correction-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.category-correction-form select,
+.category-correction-form input {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.category-correction-form button {
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 .audit-log-section {
   margin-top: 16px;
 }

@@ -64,8 +64,12 @@ function SummaryTab({ message }: { message: MessageDetail }) {
   const [level, setLevel] = useState<"3line" | "10line" | "detailed">("3line");
   const [summary, setSummary] = useState(message.summary_3line ?? "");
   const [loading, setLoading] = useState(false);
+  const [correctedType, setCorrectedType] = useState<string | null>(null);
 
   const categories = (message.classification?.categories as { label: string; confidence: number }[] | undefined) ?? [];
+  const displayCategories = correctedType
+    ? [{ label: correctedType, confidence: 1 }, ...categories.filter((c) => c.label !== correctedType)]
+    : categories;
 
   const runSummarize = async (nextLevel: typeof level) => {
     setLevel(nextLevel);
@@ -89,9 +93,9 @@ function SummaryTab({ message }: { message: MessageDetail }) {
       </div>
       <p className="summary-text">{loading ? "生成中…" : summary || "まだ要約が生成されていません"}</p>
 
-      {categories.length > 0 && (
+      {displayCategories.length > 0 && (
         <div className="category-tags">
-          {categories.map((c) => (
+          {displayCategories.map((c) => (
             <span key={c.label} className="category-tag">
               {c.label} <em>{Math.round(c.confidence * 100)}%</em>
             </span>
@@ -99,7 +103,76 @@ function SummaryTab({ message }: { message: MessageDetail }) {
         </div>
       )}
 
+      <CategoryCorrection messageId={message.id} onCorrected={setCorrectedType} />
       <AuditLogSection messageId={message.id} />
+    </div>
+  );
+}
+
+const CATEGORY_OPTIONS = [
+  "案件紹介",
+  "人材紹介",
+  "案件返信",
+  "人材返信",
+  "日程調整",
+  "契約",
+  "請求",
+  "営業メール",
+  "広告",
+  "自動配信",
+  "社内",
+  "障害通知",
+  "重要",
+  "要返信",
+  "迷惑メール",
+  "その他",
+];
+
+function CategoryCorrection({ messageId, onCorrected }: { messageId: string; onCorrected: (label: string) => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const [selected, setSelected] = useState(CATEGORY_OPTIONS[0]);
+  const [custom, setCustom] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [confirmed, setConfirmed] = useState<string | null>(null);
+
+  const submit = async () => {
+    const label = custom.trim() || selected;
+    setSaving(true);
+    try {
+      await api.correctClassification(messageId, label);
+      onCorrected(label);
+      setConfirmed(label);
+      setExpanded(false);
+      setCustom("");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="category-correction">
+      {!expanded && (
+        <button className="audit-log-toggle" onClick={() => setExpanded(true)}>
+          この分類は違います
+        </button>
+      )}
+      {expanded && (
+        <div className="category-correction-form">
+          <select value={selected} onChange={(e) => setSelected(e.target.value)}>
+            {CATEGORY_OPTIONS.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <input placeholder="または自由入力" value={custom} onChange={(e) => setCustom(e.target.value)} />
+          <button onClick={submit} disabled={saving}>
+            {saving ? "保存中…" : "この分類に修正する"}
+          </button>
+          <button onClick={() => setExpanded(false)}>キャンセル</button>
+        </div>
+      )}
+      {confirmed && <p className="reply-status">「{confirmed}」に修正しました。今後の類似メール分類に反映されます。</p>}
     </div>
   );
 }
