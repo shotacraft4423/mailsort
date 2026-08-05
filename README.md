@@ -17,12 +17,81 @@ docs/       デフォルトプロンプト等のドキュメント/シードデ�
 
 ## セットアップ
 
-### バックエンド (Python 3.11+)
+### Windows での手順
+
+**前提ツール**（すべて一度だけインストール）:
+
+| ツール | 用途 | 入手先 |
+|---|---|---|
+| Python 3.11以上 | バックエンド | [python.org](https://www.python.org/downloads/windows/)（インストール時に「Add python.exe to PATH」を必ずチェック） |
+| Node.js 18以上 | フロントエンド | [nodejs.org](https://nodejs.org/) (LTS版) |
+| Rust + MSVC Build Tools | Tauriデスクトップアプリ化（省略可、まずはブラウザ動作確認だけなら不要） | [rustup.rs](https://rustup.rs/) 実行後、[Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)（「C++によるデスクトップ開発」ワークロード）も必要 |
+| WebView2 | Tauriのレンダリング（Windows 11は標準搭載、Windows 10は要インストール） | [Microsoft公式](https://developer.microsoft.com/microsoft-edge/webview2/) |
+| Tesseract-OCR（任意） | 名刺OCR・画像添付のOCR | [UB-Mannheim版インストーラ](https://github.com/UB-Mannheim/tesseract/wiki)。未インストールでもアプリ自体は正常動作します（OCR結果が空になるだけ） |
+
+PowerShellを開き、リポジトリのルートで以下を実行します。
+
+**1. バックエンド**
+
+```powershell
+cd backend
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+uvicorn app.main:app --reload --port 8000
+```
+
+- `.venv\Scripts\Activate.ps1` の実行でエラーが出る場合、PowerShellの実行ポリシーが原因です。
+  管理者権限で一度だけ `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` を実行してください。
+- 初回起動時、Windows Defender ファイアウォールが「Pythonのネットワークアクセスを許可しますか」と聞いてくることがあります（`許可`でOK。ローカルホストのみで待受します）。
+- 起動後 `http://127.0.0.1:8000/docs` にブラウザでアクセスできれば成功です。
+
+**2. フロントエンド**（別のPowerShellウィンドウを開いて）
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+`http://localhost:1420` をブラウザで開くとUIが表示されます（バックエンドを先に起動しておくこと）。
+
+**3. Tauriデスクトップアプリとしてビルド**（任意、Rust環境がある場合）
+
+```powershell
+npm run tauri dev     # 開発モード（ネイティブウィンドウで起動）
+npm run tauri build   # .msi / .exe インストーラを生成
+```
+
+**4. AIプロバイダーの設定（環境変数）**
+
+PowerShellでの環境変数指定は `export` ではなく `$env:` を使います:
+
+```powershell
+$env:MAILSORT_AI_ENABLED = "true"
+$env:MAILSORT_LLM_PROVIDER = "openai_compatible"
+$env:MAILSORT_OPENAI_COMPATIBLE_API_KEY = "sk-..."
+$env:MAILSORT_OPENAI_COMPATIBLE_MODEL = "gpt-4o-mini"
+```
+
+ただし、これは毎回設定し直しが必要なので、**アプリ起動後にUIの「設定」タブからAPIキーを貼り付ける方が簡単です**（一度保存すれば永続化されます）。
+
+**5. テスト実行**
+
+```powershell
+cd backend
+.venv\Scripts\Activate.ps1
+pytest
+```
+
+---
+
+### バックエンド (Python 3.11+, macOS/Linux)
 
 ```bash
 cd backend
 python3 -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
+source .venv/bin/activate   # Windows: 上記の Windows での手順を参照
 pip install -e ".[dev]"
 uvicorn app.main:app --reload --port 8000
 ```
