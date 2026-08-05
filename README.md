@@ -84,6 +84,10 @@ Tauriデスクトップアプリとしてビルドするには Rust ツールチ
 主なエンドポイント群: `/accounts` `/mail` `/ai` `/companies` `/deals` `/candidates` `/meetings`
 `/search` `/chat` `/settings` `/prompts` `/rules` `/plugins` `/dashboard`。
 
+## CI
+
+`.github/workflows/ci.yml` が push / PR ごとにバックエンド(`pytest`)とフロントエンド(`tsc -b && vite build`)を実行します。
+
 ## 現状のスコープ
 
 このリポジトリは初期スキャフォールドです。実装済み/未実装の範囲は [DESIGN.md 9節](./DESIGN.md#9-本リポジトリの実装スコープ現時点) を参照してください。
