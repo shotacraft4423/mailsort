@@ -21,6 +21,9 @@ from app.providers.llm.base import LLMProviderError
 from app.providers.llm.local_mock import LocalMockProvider
 from app.providers.llm.registry import get_llm_provider
 from app.schemas.classification import ClassificationResult
+from app.services.prompt_service import get_active_prompt, render_template
+
+TASK = "classification"
 
 DEFAULT_SYSTEM_PROMPT = (
     "あなたはSES営業向けメールアシスタントです。営業メール全体を解析し、"
@@ -28,6 +31,15 @@ DEFAULT_SYSTEM_PROMPT = (
     "営業フェーズ・重要ワード・危険ワード・営業機会・ネガティブ要素・緊急度・"
     "感情・温度感まで含めて判定し、指定されたJSONスキーマで返答してください。"
     "未知のカテゴリが妥当な場合は、既存の分類に加えて自由に追加してください。"
+)
+
+DEFAULT_USER_PROMPT_TEMPLATE = (
+    "件名: {{ subject }}\n"
+    "送信元: {{ sender_name }} <{{ sender_address }}>\n"
+    "CC: {{ cc_addresses }}\n"
+    "署名: {{ signature_text }}\n"
+    "添付ファイル名: {{ attachment_names }}\n"
+    "本文:\n{{ body }}{{ attachment_excerpts }}"
 )
 
 
@@ -38,27 +50,30 @@ class ClassificationOutcome:
     from_cache: bool
 
 
-def _build_user_prompt(message: Message, *, anonymize: bool) -> str:
+def _build_context(message: Message, *, anonymize: bool) -> dict[str, str]:
     body = message.body_text or ""
     if anonymize:
         body = mask_text(body)
-    parts = [
-        f"件名: {message.subject}",
-        f"送信元: {message.sender_name} <{message.sender_address}>",
-        f"CC: {message.cc_addresses}",
-        f"署名: {message.signature_text}",
-        f"添付ファイル名: {', '.join(a.file_name for a in message.attachments)}",
-        "本文:",
-        body,
-    ]
+
+    excerpts = []
     for attachment in message.attachments:
         if not attachment.extracted_text:
             continue
         snippet = attachment.extracted_text[:1500]
         if anonymize:
             snippet = mask_text(snippet)
-        parts.append(f"\n添付ファイル「{attachment.file_name}」({attachment.classified_kind or '種別不明'})の抜粋:\n{snippet}")
-    return "\n".join(parts)
+        excerpts.append(f"\n添付ファイル「{attachment.file_name}」({attachment.classified_kind or '種別不明'})の抜粋:\n{snippet}")
+
+    return {
+        "subject": message.subject,
+        "sender_name": message.sender_name,
+        "sender_address": message.sender_address,
+        "cc_addresses": message.cc_addresses,
+        "signature_text": message.signature_text,
+        "attachment_names": ", ".join(a.file_name for a in message.attachments),
+        "body": body,
+        "attachment_excerpts": "".join(excerpts),
+    }
 
 
 async def classify_message(db: Session, message: Message, *, force: bool = False) -> ClassificationOutcome:
@@ -77,16 +92,21 @@ async def classify_message(db: Session, message: Message, *, force: bool = False
             from_cache=True,
         )
 
-    user_prompt = _build_user_prompt(message, anonymize=settings.anonymize_before_send)
+    active_prompt = get_active_prompt(db, TASK)
+    system_prompt = active_prompt.system_prompt if active_prompt else DEFAULT_SYSTEM_PROMPT
+    user_template = active_prompt.user_prompt_template if active_prompt else DEFAULT_USER_PROMPT_TEMPLATE
+    context = _build_context(message, anonymize=settings.anonymize_before_send)
+    user_prompt = render_template(user_template, context)
+
     provider = get_llm_provider()
     is_fallback = False
 
     try:
-        raw, _usage = await provider.complete_json(system_prompt=DEFAULT_SYSTEM_PROMPT, user_prompt=user_prompt)
+        raw, _usage = await provider.complete_json(system_prompt=system_prompt, user_prompt=user_prompt)
     except LLMProviderError:
         provider = LocalMockProvider()
         is_fallback = True
-        raw, _usage = await provider.complete_json(system_prompt=DEFAULT_SYSTEM_PROMPT, user_prompt=user_prompt)
+        raw, _usage = await provider.complete_json(system_prompt=system_prompt, user_prompt=user_prompt)
 
     result = ClassificationResult.model_validate(raw)
 
@@ -98,6 +118,7 @@ async def classify_message(db: Session, message: Message, *, force: bool = False
 
     analysis.content_hash = hash_input
     analysis.provider_used = provider.name
+    analysis.prompt_template_id = active_prompt.template_id if active_prompt else None
     analysis.classification_json = json.dumps(result.model_dump(), ensure_ascii=False)
     analysis.is_fallback = is_fallback
     db.flush()

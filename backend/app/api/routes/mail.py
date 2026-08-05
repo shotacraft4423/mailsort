@@ -31,12 +31,23 @@ class MessageOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class AttachmentOut(BaseModel):
+    id: str
+    file_name: str
+    content_type: str
+    size_bytes: int
+    classified_kind: str | None
+
+    model_config = {"from_attributes": True}
+
+
 class MessageDetailOut(MessageOut):
     body_text: str
     body_html: str
     classification: dict | None = None
     extraction: dict | None = None
     summary_3line: str | None = None
+    attachments: list[AttachmentOut] = []
 
 
 class DraftCreate(BaseModel):
@@ -83,6 +94,7 @@ def get_message(message_id: str, db: Session = Depends(get_db)) -> MessageDetail
         classification=json.loads(analysis.classification_json) if analysis and analysis.classification_json else None,
         extraction=json.loads(analysis.extraction_json) if analysis and analysis.extraction_json else None,
         summary_3line=analysis.summary_3line if analysis else None,
+        attachments=[AttachmentOut.model_validate(a) for a in message.attachments],
     )
 
 

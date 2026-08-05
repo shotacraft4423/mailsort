@@ -34,12 +34,21 @@ export interface MessageSummary {
   received_at: string | null;
 }
 
+export interface AttachmentInfo {
+  id: string;
+  file_name: string;
+  content_type: string;
+  size_bytes: number;
+  classified_kind: string | null;
+}
+
 export interface MessageDetail extends MessageSummary {
   body_text: string;
   body_html: string;
   classification: Record<string, unknown> | null;
   extraction: Record<string, unknown> | null;
   summary_3line: string | null;
+  attachments: AttachmentInfo[];
 }
 
 export interface DashboardData {
@@ -194,6 +203,51 @@ export interface RelatedData {
   }[];
 }
 
+export interface PromptVersion {
+  id: string;
+  version_number: number;
+  system_prompt: string;
+  user_prompt_template: string;
+  notes: string;
+}
+
+export interface PromptTemplate {
+  id: string;
+  name: string;
+  task: string;
+  is_active: boolean;
+  active_version_id: string | null;
+  versions: PromptVersion[];
+}
+
+export interface RuleCondition {
+  field: string;
+  operator: string;
+  value: string;
+}
+
+export interface RuleAction {
+  type: string;
+  params: Record<string, string>;
+}
+
+export interface Rule {
+  id: string;
+  name: string;
+  is_active: boolean;
+  priority: number;
+  match_mode: string;
+  conditions: RuleCondition[];
+  actions: RuleAction[];
+}
+
+export interface PluginInfo {
+  key: string;
+  name: string;
+  version: string;
+  is_enabled: boolean;
+}
+
 export const api = {
   listMessages: (folder = "INBOX") => request<MessageSummary[]>(`/mail?folder=${encodeURIComponent(folder)}`),
   getMessage: (id: string) => request<MessageDetail>(`/mail/${id}`),
@@ -246,4 +300,21 @@ export const api = {
 
   search: (q: string) => request<MessageHit[]>(`/search?q=${encodeURIComponent(q)}`),
   searchNatural: (q: string) => request<MessageHit[]>(`/search/natural?q=${encodeURIComponent(q)}`),
+
+  listPrompts: () => request<PromptTemplate[]>("/prompts"),
+  createPrompt: (input: { name: string; task: string; system_prompt: string; user_prompt_template: string }) =>
+    request<PromptTemplate>("/prompts", { method: "POST", body: JSON.stringify(input) }),
+  addPromptVersion: (
+    templateId: string,
+    input: { system_prompt: string; user_prompt_template: string; notes?: string; activate?: boolean }
+  ) => request<PromptVersion>(`/prompts/${templateId}/versions`, { method: "POST", body: JSON.stringify(input) }),
+
+  listRules: () => request<Rule[]>("/rules"),
+  createRule: (input: { name: string; priority?: number; match_mode?: string; conditions: RuleCondition[]; actions: RuleAction[] }) =>
+    request<Rule>("/rules", { method: "POST", body: JSON.stringify(input) }),
+  toggleRule: (id: string) => request<Rule>(`/rules/${id}/toggle`, { method: "PATCH" }),
+
+  listPlugins: () => request<PluginInfo[]>("/plugins"),
+  updatePlugin: (key: string, input: { is_enabled: boolean; config?: Record<string, string> }) =>
+    request<PluginInfo>(`/plugins/${key}`, { method: "PUT", body: JSON.stringify(input) }),
 };

@@ -17,6 +17,9 @@ from app.providers.llm.base import LLMProviderError
 from app.providers.llm.local_mock import LocalMockProvider
 from app.providers.llm.registry import get_llm_provider
 from app.schemas.extraction import ExtractionResult
+from app.services.prompt_service import get_active_prompt, render_template
+
+TASK = "extraction"
 
 DEFAULT_SYSTEM_PROMPT = (
     "あなたはSES営業メールから構造化データを抽出するアシスタントです。"
@@ -28,6 +31,8 @@ DEFAULT_SYSTEM_PROMPT = (
     "本文に存在しない項目はnullまたは空配列にしてください。"
 )
 
+DEFAULT_USER_PROMPT_TEMPLATE = "件名: {{ subject }}\n本文:\n{{ body }}"
+
 
 @dataclass
 class ExtractionOutcome:
@@ -38,12 +43,16 @@ class ExtractionOutcome:
 async def extract_message(db: Session, message: Message) -> ExtractionOutcome:
     settings = get_settings()
     body = mask_text(message.body_text) if settings.anonymize_before_send else message.body_text
-    user_prompt = f"件名: {message.subject}\n本文:\n{body}"
+
+    active_prompt = get_active_prompt(db, TASK)
+    system_prompt = active_prompt.system_prompt if active_prompt else DEFAULT_SYSTEM_PROMPT
+    user_template = active_prompt.user_prompt_template if active_prompt else DEFAULT_USER_PROMPT_TEMPLATE
+    user_prompt = render_template(user_template, {"subject": message.subject, "body": body})
 
     provider = get_llm_provider()
     is_fallback = False
     try:
-        raw, _usage = await provider.complete_json(system_prompt=DEFAULT_SYSTEM_PROMPT, user_prompt=user_prompt)
+        raw, _usage = await provider.complete_json(system_prompt=system_prompt, user_prompt=user_prompt)
     except LLMProviderError:
         raw, is_fallback = {}, True  # local mock has no dedicated extraction logic; empty result is safe default
 

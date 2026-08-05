@@ -5,10 +5,11 @@ import { AIPanel } from "./components/AIPanel";
 import { ReplyComposer } from "./components/ReplyComposer";
 import { DashboardView } from "./components/DashboardView";
 import { SettingsView } from "./components/SettingsView";
+import { AdminView } from "./components/AdminView";
 import { api } from "./api/client";
 import type { MessageDetail, MessageHit, MessageSummary } from "./api/client";
 
-type View = "mail" | "dashboard" | "settings";
+type View = "mail" | "dashboard" | "admin" | "settings";
 
 export default function App() {
   const [view, setView] = useState<View>("mail");
@@ -22,6 +23,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<MessageHit[] | null>(null);
   const [searching, setSearching] = useState(false);
+  const [classifying, setClassifying] = useState(false);
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
@@ -73,6 +75,17 @@ export default function App() {
     return () => window.removeEventListener("keydown", handler);
   }, [messages, searchResults, selectedId]);
 
+  const runClassify = async () => {
+    if (!selectedId) return;
+    setClassifying(true);
+    try {
+      await api.classify(selectedId);
+      setSelectedMessage(await api.getMessage(selectedId));
+    } finally {
+      setClassifying(false);
+    }
+  };
+
   const runSearch = async () => {
     if (!searchQuery.trim()) {
       setSearchResults(null);
@@ -110,6 +123,9 @@ export default function App() {
           </button>
           <button className={view === "dashboard" ? "active" : ""} onClick={() => setView("dashboard")}>
             ダッシュボード
+          </button>
+          <button className={view === "admin" ? "active" : ""} onClick={() => setView("admin")}>
+            管理
           </button>
           <button className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}>
             設定
@@ -151,6 +167,7 @@ export default function App() {
       </header>
 
       {view === "dashboard" && <DashboardView />}
+      {view === "admin" && <AdminView />}
       {view === "settings" && <SettingsView />}
 
       {view === "mail" && (
@@ -172,11 +189,27 @@ export default function App() {
                 <>
                   <div className="detail-toolbar">
                     <h2>{selectedMessage.subject || "(件名なし)"}</h2>
+                    <button onClick={runClassify} disabled={classifying}>
+                      {classifying ? "分類中…" : selectedMessage.classification ? "再分類" : "AI分類を実行"}
+                    </button>
                     <button onClick={() => setReplying(true)}>返信（r）</button>
                   </div>
                   <p className="detail-meta">
                     {selectedMessage.sender_name} &lt;{selectedMessage.sender_address}&gt;
                   </p>
+                  {selectedMessage.attachments.length > 0 && (
+                    <ul className="attachment-list">
+                      {selectedMessage.attachments.map((a) => (
+                        <li key={a.id}>
+                          <span>{a.file_name}</span>
+                          {a.classified_kind && a.classified_kind !== "other" && (
+                            <span className="attachment-kind-badge">{a.classified_kind}</span>
+                          )}
+                          <span className="attachment-size">{Math.ceil(a.size_bytes / 1024)} KB</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                   <pre className="detail-body">{selectedMessage.body_text}</pre>
                 </>
               )

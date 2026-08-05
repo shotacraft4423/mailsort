@@ -540,6 +540,39 @@ body {
   cursor: pointer;
 }
 
+.attachment-list {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.attachment-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 10px;
+  width: fit-content;
+}
+
+.attachment-kind-badge {
+  background: var(--accent);
+  color: white;
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11px;
+}
+
+.attachment-size {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
 /* AI panel related-data tabs */
 
 .related-info {
@@ -582,4 +615,160 @@ body {
   padding: 1px 8px;
   font-size: 10px;
   margin-left: 6px;
+}
+
+/* Admin view (prompts / rules / plugins) */
+
+.admin-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 12px 0 20px;
+}
+
+.admin-tabs button {
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
+.admin-tabs button.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.admin-panel {
+  max-width: 720px;
+}
+
+.admin-panel textarea,
+.admin-panel input,
+.admin-panel select {
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-family: inherit;
+  margin-top: 4px;
+}
+
+.admin-panel label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.prompt-list,
+.rule-list,
+.plugin-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.prompt-card,
+.rule-card,
+.plugin-card {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.rule-card.inactive {
+  opacity: 0.55;
+}
+
+.prompt-card-header,
+.rule-card-header,
+.plugin-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.prompt-card-header button,
+.rule-card-header button,
+.plugin-card-header button {
+  margin-left: auto;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.task-badge {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.prompt-version-form,
+.prompt-create-form,
+.rule-create-form {
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  margin-top: 10px;
+}
+
+.rule-summary {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.rule-inline-fields {
+  display: flex;
+  gap: 16px;
+}
+
+.rule-condition-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.rule-condition-row select,
+.rule-condition-row input {
+  width: auto;
+  margin-top: 0;
+}
+
+.rule-condition-row button {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.rule-action-field input {
+  margin-top: 4px;
+}
+
+.admin-panel button.primary {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 16px;
+  cursor: pointer;
+  width: auto;
 }
