@@ -101,6 +101,9 @@ function AccountsSection() {
 function AISettingsSection() {
   const [settings, setSettings] = useState<SettingsData | null>(null);
   const [saving, setSaving] = useState(false);
+  const [openaiKeyInput, setOpenaiKeyInput] = useState("");
+  const [anthropicKeyInput, setAnthropicKeyInput] = useState("");
+  const [savedMessage, setSavedMessage] = useState<string | null>(null);
 
   useEffect(() => {
     api.getSettings().then(setSettings).catch(() => setSettings(null));
@@ -108,7 +111,7 @@ function AISettingsSection() {
 
   if (!settings) return <section className="settings-section">読み込み中…</section>;
 
-  const update = async (patch: Partial<SettingsData>) => {
+  const update = async (patch: Partial<SettingsData> & { openai_compatible_api_key?: string; anthropic_api_key?: string }) => {
     setSaving(true);
     try {
       const next = await api.updateSettings(patch);
@@ -116,6 +119,20 @@ function AISettingsSection() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const saveOpenaiKey = async () => {
+    if (!openaiKeyInput.trim()) return;
+    await update({ openai_compatible_api_key: openaiKeyInput.trim(), llm_provider: "openai_compatible" });
+    setOpenaiKeyInput("");
+    setSavedMessage("OpenAI互換のAPIキーを保存しました。プロバイダーを openai_compatible に切り替えました。");
+  };
+
+  const saveAnthropicKey = async () => {
+    if (!anthropicKeyInput.trim()) return;
+    await update({ anthropic_api_key: anthropicKeyInput.trim() });
+    setAnthropicKeyInput("");
+    setSavedMessage("Anthropic のAPIキーを保存しました。");
   };
 
   return (
@@ -171,9 +188,42 @@ function AISettingsSection() {
         />
       </label>
 
+      <label className="settings-row">
+        <span>OpenAI APIキー（{settings.has_openai_compatible_key ? "設定済み" : "未設定"}）</span>
+        <span className="settings-key-input">
+          <input
+            type="password"
+            placeholder="sk-..."
+            value={openaiKeyInput}
+            onChange={(e) => setOpenaiKeyInput(e.target.value)}
+            disabled={saving}
+          />
+          <button onClick={saveOpenaiKey} disabled={saving || !openaiKeyInput.trim()}>
+            保存
+          </button>
+        </span>
+      </label>
+
+      <label className="settings-row">
+        <span>Anthropic APIキー（{settings.has_anthropic_key ? "設定済み" : "未設定"}）</span>
+        <span className="settings-key-input">
+          <input
+            type="password"
+            placeholder="sk-ant-..."
+            value={anthropicKeyInput}
+            onChange={(e) => setAnthropicKeyInput(e.target.value)}
+            disabled={saving}
+          />
+          <button onClick={saveAnthropicKey} disabled={saving || !anthropicKeyInput.trim()}>
+            保存
+          </button>
+        </span>
+      </label>
+
+      {savedMessage && <p className="reply-status">{savedMessage}</p>}
+
       <p className="ai-empty">
-        APIキーはこの画面からは表示されません（設定済み: OpenAI互換={settings.has_openai_compatible_key ? "あり" : "なし"} /
-        Anthropic={settings.has_anthropic_key ? "あり" : "なし"}）。
+        保存したキーはこの画面に再表示されません。GPT-4o miniなど低コストモデルが既定のため、まずはOpenAIキーの保存だけで動作確認できます。
       </p>
     </section>
   );

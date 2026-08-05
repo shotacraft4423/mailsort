@@ -41,7 +41,22 @@ export MAILSORT_OPENAI_COMPATIBLE_MODEL=gpt-4o-mini
 ```
 
 `openai_compatible` は OpenAI / Azure OpenAI / OpenRouter / Ollama / LM Studio / Dify(OpenAI互換モード) 等、
-base_urlを差し替えるだけであらゆるOpenAI互換エンドポイントに対応します（`GET/PUT /settings` からも変更可能）。
+base_urlを差し替えるだけであらゆるOpenAI互換エンドポイントに対応します（`GET/PUT /settings` からも変更可能、
+アプリのUIの「設定」タブからAPIキーを直接貼り付けることもできます）。
+
+#### トークン消費を抑える設計
+
+低コスト/従量課金プランでの運用を想定し、以下をデフォルトで実施しています:
+
+- **既定モデルは `gpt-4o-mini`**（`MAILSORT_OPENAI_COMPATIBLE_MODEL` で変更可）。
+- **メール同期時の自動解析は分類・抽出を1回のLLM呼び出しにまとめて実行**（`services/analysis_service.py`）。
+  本文とシステムプロンプトを2回分ではなく1回分しか送らないため、従来比で自動処理の入力トークンをおよそ半減させています。
+- **同一メールの再解析はキャッシュ**（`AIAnalysis.content_hash`）。IMAP再同期などで同じ内容のメールを再取り込みしてもLLMは呼ばれません。
+- **本文・添付抜粋は既定で `MAILSORT_MAX_BODY_CHARS_FOR_AI`(既定4000字) / `MAILSORT_MAX_ATTACHMENT_EXCERPT_CHARS`(既定1500字) に切り詰め**。
+  長いスレッドや大きな添付でもLLMへの送信量に上限を設けます（DB保存内容は切り詰めません）。
+- **重複判定・マッチングスコアは埋め込み類似度で候補を絞り込んでからLLM検証**。重複判定のLLM呼び出しは
+  `MAILSORT_DUPLICATE_LLM_VERIFICATION_TOP_N`(既定5件) までに上限を設定、マッチングも上位`top_n`件のみLLMでスコアリングします。
+- **要約・返信下書き・チャットはユーザー操作時のみ実行**（自動実行しません）。
 
 テスト実行:
 

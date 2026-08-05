@@ -1,0 +1,142 @@
+"""Combined classification+extraction in a single LLM call.
+
+Token-efficiency note: the automatic per-message pipeline (queue.py, fired
+on every synced email) used to make two separate LLM calls — one via
+classification_service, one via extraction_service — each re-sending the
+full email body plus its own system prompt. Since both tasks read the same
+email and only differ in what JSON shape they ask for, merging them sends
+the body once instead of twice and pays for one system prompt's overhead
+instead of two. That roughly halves per-message input tokens on the
+highest-volume path, which matters directly on a metered/low-tier plan.
+
+Manual, single-purpose re-runs (the UI's per-task buttons, or testing one
+prompt in isolation via the prompt editor) still go through
+classification_service.classify_message / extraction_service.extract_message
+individually — this module builds on top of them rather than replacing them.
+"""
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+
+from sqlalchemy.orm import Session
+
+from app.core.config import get_settings
+from app.core.security import content_hash
+from app.db.models.ai import AIAnalysis, AuditLogEntry
+from app.db.models.email import Message
+from app.providers.llm.base import LLMProviderError
+from app.providers.llm.local_mock import LocalMockProvider
+from app.providers.llm.registry import get_llm_provider
+from app.schemas.classification import ClassificationResult
+from app.schemas.extraction import ExtractionResult
+from app.services import classification_service, extraction_service
+from app.services.prompt_service import get_active_prompt, render_template
+
+# Matched by LocalMockProvider to return a combined stub shape instead of
+# the plain classification shape — see providers/llm/local_mock.py.
+COMBINED_MARKER = "統合解析タスク"
+
+
+@dataclass
+class AnalysisOutcome:
+    analysis: AIAnalysis
+    classification: ClassificationResult
+    extraction: ExtractionResult
+    from_cache: bool
+    is_fallback: bool
+
+
+def _combined_system_prompt(db: Session) -> tuple[str, str | None]:
+    """Builds one system prompt out of whichever classification/extraction
+    prompts are currently active (GUI-edited or module defaults), and
+    returns the classification template's id for AIAnalysis.prompt_template_id
+    bookkeeping (the extraction half doesn't get its own FK slot — see
+    AIAnalysis.prompt_template_id's single-column design)."""
+    active_classification = get_active_prompt(db, classification_service.TASK)
+    active_extraction = get_active_prompt(db, extraction_service.TASK)
+
+    classification_prompt = active_classification.system_prompt if active_classification else classification_service.DEFAULT_SYSTEM_PROMPT
+    extraction_prompt = active_extraction.system_prompt if active_extraction else extraction_service.DEFAULT_SYSTEM_PROMPT
+
+    system_prompt = (
+        f"{COMBINED_MARKER}: 以下の2つのタスクを1回の応答でまとめて行ってください。\n\n"
+        f"【タスク1: 分類】{classification_prompt}\n\n"
+        f"【タスク2: 抽出】{extraction_prompt}\n\n"
+        '必ず {"classification": {タスク1のJSONスキーマ}, "extraction": {タスク2のJSONスキーマ}} '
+        "という単一のJSONオブジェクトのみを返してください。他の文章は含めないでください。"
+    )
+    template_id = active_classification.template_id if active_classification else None
+    return system_prompt, template_id
+
+
+async def analyze_message(db: Session, message: Message, *, force: bool = False) -> AnalysisOutcome:
+    settings = get_settings()
+    hash_input = content_hash(
+        message.subject,
+        message.body_text,
+        ",".join(sorted(a.file_name for a in message.attachments)),
+    )
+
+    existing = db.query(AIAnalysis).filter(AIAnalysis.message_id == message.id).one_or_none()
+    if existing and existing.content_hash == hash_input and not force:
+        return AnalysisOutcome(
+            analysis=existing,
+            classification=ClassificationResult.model_validate(json.loads(existing.classification_json or "{}")),
+            extraction=ExtractionResult.model_validate(json.loads(existing.extraction_json or "{}")),
+            from_cache=True,
+            is_fallback=existing.is_fallback,
+        )
+
+    system_prompt, template_id = _combined_system_prompt(db)
+    active_classification = get_active_prompt(db, classification_service.TASK)
+    user_template = (
+        active_classification.user_prompt_template if active_classification else classification_service.DEFAULT_USER_PROMPT_TEMPLATE
+    )
+    context = classification_service.build_context(message, anonymize=settings.anonymize_before_send)
+    user_prompt = render_template(user_template, context)
+
+    provider = get_llm_provider()
+    is_fallback = False
+    try:
+        raw, _usage = await provider.complete_json(system_prompt=system_prompt, user_prompt=user_prompt)
+    except LLMProviderError:
+        provider = LocalMockProvider()
+        is_fallback = True
+        raw, _usage = await provider.complete_json(system_prompt=system_prompt, user_prompt=user_prompt)
+
+    classification = ClassificationResult.model_validate(raw.get("classification") or {})
+    extraction = ExtractionResult.model_validate(raw.get("extraction") or {})
+
+    if existing:
+        analysis = existing
+    else:
+        analysis = AIAnalysis(message_id=message.id)
+        db.add(analysis)
+
+    analysis.content_hash = hash_input
+    analysis.provider_used = provider.name
+    analysis.prompt_template_id = template_id
+    analysis.classification_json = json.dumps(classification.model_dump(), ensure_ascii=False)
+    analysis.extraction_json = json.dumps(extraction.model_dump(), ensure_ascii=False)
+    analysis.is_fallback = is_fallback
+    db.flush()
+
+    db.add(
+        AuditLogEntry(
+            message_id=message.id,
+            action="analyze",
+            provider_used=provider.name,
+            rationale=classification.rationale or "根拠は返却されませんでした。",
+            data_sent_summary=(
+                "件名/送信元/CC/署名/添付ファイル名/本文（分類・抽出を1回のAI呼び出しでまとめて実行）"
+                + ("（匿名化済み）" if settings.anonymize_before_send else "")
+            ),
+            anonymized=settings.anonymize_before_send,
+        )
+    )
+    db.commit()
+
+    return AnalysisOutcome(
+        analysis=analysis, classification=classification, extraction=extraction, from_cache=False, is_fallback=is_fallback
+    )

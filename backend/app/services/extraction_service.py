@@ -17,7 +17,7 @@ from app.providers.llm.base import LLMProviderError
 from app.providers.llm.local_mock import LocalMockProvider
 from app.providers.llm.registry import get_llm_provider
 from app.schemas.extraction import ExtractionResult
-from app.services.prompt_service import get_active_prompt, render_template
+from app.services.prompt_service import get_active_prompt, render_template, truncate_for_ai
 
 TASK = "extraction"
 
@@ -43,6 +43,7 @@ class ExtractionOutcome:
 async def extract_message(db: Session, message: Message) -> ExtractionOutcome:
     settings = get_settings()
     body = mask_text(message.body_text) if settings.anonymize_before_send else message.body_text
+    body = truncate_for_ai(body, settings.max_body_chars_for_ai)
 
     active_prompt = get_active_prompt(db, TASK)
     system_prompt = active_prompt.system_prompt if active_prompt else DEFAULT_SYSTEM_PROMPT

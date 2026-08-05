@@ -6,7 +6,14 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.db.models.email import Message
-from app.services import classification_service, extraction_service, queue, reply_suggestion_service, summarization_service
+from app.services import (
+    analysis_service,
+    classification_service,
+    extraction_service,
+    queue,
+    reply_suggestion_service,
+    summarization_service,
+)
 from app.services.summarization_service import SummaryLevel
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -19,8 +26,27 @@ def _get_message(db: Session, message_id: str) -> Message:
     return message
 
 
+@router.post("/messages/{message_id}/analyze")
+async def analyze(message_id: str, force: bool = False, db: Session = Depends(get_db)) -> dict:
+    """Preferred entry point: classification + extraction in one LLM call.
+    See analysis_service's docstring for why this is cheaper than calling
+    /classify then /extract separately."""
+    message = _get_message(db, message_id)
+    outcome = await analysis_service.analyze_message(db, message, force=force)
+    return {
+        "from_cache": outcome.from_cache,
+        "is_fallback": outcome.is_fallback,
+        "provider_used": outcome.analysis.provider_used,
+        "classification": outcome.classification.model_dump(),
+        "extraction": outcome.extraction.model_dump(),
+    }
+
+
 @router.post("/messages/{message_id}/classify")
 async def classify(message_id: str, force: bool = False, db: Session = Depends(get_db)) -> dict:
+    """Classification only, no extraction. Prefer POST .../analyze for the
+    combined (cheaper) call; this stays for testing the classification
+    prompt in isolation."""
     message = _get_message(db, message_id)
     outcome = await classification_service.classify_message(db, message, force=force)
     return {

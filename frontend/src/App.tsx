@@ -79,7 +79,7 @@ export default function App() {
     if (!selectedId) return;
     setClassifying(true);
     try {
-      await api.classify(selectedId);
+      await api.analyze(selectedId);
       setSelectedMessage(await api.getMessage(selectedId));
     } finally {
       setClassifying(false);

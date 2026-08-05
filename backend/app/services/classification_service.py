@@ -21,7 +21,7 @@ from app.providers.llm.base import LLMProviderError
 from app.providers.llm.local_mock import LocalMockProvider
 from app.providers.llm.registry import get_llm_provider
 from app.schemas.classification import ClassificationResult
-from app.services.prompt_service import get_active_prompt, render_template
+from app.services.prompt_service import get_active_prompt, render_template, truncate_for_ai
 
 TASK = "classification"
 
@@ -50,16 +50,21 @@ class ClassificationOutcome:
     from_cache: bool
 
 
-def _build_context(message: Message, *, anonymize: bool) -> dict[str, str]:
+def build_context(message: Message, *, anonymize: bool) -> dict[str, str]:
+    """Shared by classification_service and analysis_service (the combined
+    classify+extract call) so both send an identically-truncated body —
+    see Settings.max_body_chars_for_ai / max_attachment_excerpt_chars."""
+    settings = get_settings()
     body = message.body_text or ""
     if anonymize:
         body = mask_text(body)
+    body = truncate_for_ai(body, settings.max_body_chars_for_ai)
 
     excerpts = []
     for attachment in message.attachments:
         if not attachment.extracted_text:
             continue
-        snippet = attachment.extracted_text[:1500]
+        snippet = truncate_for_ai(attachment.extracted_text, settings.max_attachment_excerpt_chars)
         if anonymize:
             snippet = mask_text(snippet)
         excerpts.append(f"\n添付ファイル「{attachment.file_name}」({attachment.classified_kind or '種別不明'})の抜粋:\n{snippet}")
@@ -95,7 +100,7 @@ async def classify_message(db: Session, message: Message, *, force: bool = False
     active_prompt = get_active_prompt(db, TASK)
     system_prompt = active_prompt.system_prompt if active_prompt else DEFAULT_SYSTEM_PROMPT
     user_template = active_prompt.user_prompt_template if active_prompt else DEFAULT_USER_PROMPT_TEMPLATE
-    context = _build_context(message, anonymize=settings.anonymize_before_send)
+    context = build_context(message, anonymize=settings.anonymize_before_send)
     user_prompt = render_template(user_template, context)
 
     provider = get_llm_provider()

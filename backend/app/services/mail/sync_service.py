@@ -43,8 +43,10 @@ async def sync_account(db: Session, account: EmailAccount, *, folder: str = "INB
         db.refresh(message)
         created.append(message)
 
-        queue.enqueue(db, message.id, "classify")
-        queue.enqueue(db, message.id, "extract")
+        # One combined "analyze" job instead of separate classify+extract
+        # jobs: half the LLM calls (and half the queue rows) per synced
+        # message — see analysis_service's module docstring.
+        queue.enqueue(db, message.id, "analyze")
 
     return created
 

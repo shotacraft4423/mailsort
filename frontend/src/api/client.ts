@@ -279,6 +279,7 @@ export const api = {
     input: { to: string[]; cc?: string[]; subject: string; body_text: string; in_reply_to?: string }
   ) => request<{ status: string }>(`/mail/${messageId}/send`, { method: "POST", body: JSON.stringify(input) }),
 
+  analyze: (id: string) => request(`/ai/messages/${id}/analyze`, { method: "POST" }),
   classify: (id: string) => request(`/ai/messages/${id}/classify`, { method: "POST" }),
   summarize: (id: string, level: "3line" | "10line" | "detailed") =>
     request<{ level: string; summary: string }>(`/ai/messages/${id}/summarize`, {

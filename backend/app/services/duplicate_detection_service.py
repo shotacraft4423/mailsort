@@ -60,22 +60,26 @@ async def find_duplicate_deals(db: Session, deal: Deal, *, verify_with_llm: bool
     vectors = await embedder.embed(texts)
     target_vec, other_vecs = vectors[0], vectors[1:]
 
-    matches: list[DuplicateMatch] = []
+    above_threshold: list[tuple[Deal, float]] = []
     for other, vec in zip(candidates, other_vecs):
         similarity = cosine_similarity(target_vec, vec)
-        if similarity < settings.duplicate_similarity_threshold:
-            continue
-        relation: DuplicateRelation = "candidate"
-        reason = f"埋め込み類似度 {similarity:.2f} が閾値を超過"
+        if similarity >= settings.duplicate_similarity_threshold:
+            above_threshold.append((other, similarity))
+    above_threshold.sort(key=lambda pair: pair[1], reverse=True)
 
-        if verify_with_llm:
-            relation, reason = await _verify_relation(
-                kind="案件", a=_deal_fingerprint(deal), b=_deal_fingerprint(other)
-            )
+    matches: list[DuplicateMatch] = []
+    # Embedding similarity is cheap; the LLM verification call is not. Cap
+    # it to the strongest N candidates (settings.duplicate_llm_verification_top_n)
+    # instead of one call per above-threshold match, which could otherwise
+    # scale unboundedly with how many similar deals are on file.
+    for rank, (other, similarity) in enumerate(above_threshold):
+        if verify_with_llm and rank < settings.duplicate_llm_verification_top_n:
+            relation, reason = await _verify_relation(kind="案件", a=_deal_fingerprint(deal), b=_deal_fingerprint(other))
+        else:
+            relation, reason = "candidate", f"埋め込み類似度 {similarity:.2f} が閾値を超過"
 
         matches.append(DuplicateMatch(other_id=other.id, similarity=similarity, relation=relation, reason=reason))
 
-    matches.sort(key=lambda m: m.similarity, reverse=True)
     return matches
 
 
@@ -92,22 +96,24 @@ async def find_duplicate_candidates(
     vectors = await embedder.embed(texts)
     target_vec, other_vecs = vectors[0], vectors[1:]
 
-    matches: list[DuplicateMatch] = []
+    above_threshold: list[tuple[Candidate, float]] = []
     for other, vec in zip(others, other_vecs):
         similarity = cosine_similarity(target_vec, vec)
-        if similarity < settings.duplicate_similarity_threshold:
-            continue
-        relation: DuplicateRelation = "candidate"
-        reason = f"埋め込み類似度 {similarity:.2f} が閾値を超過"
+        if similarity >= settings.duplicate_similarity_threshold:
+            above_threshold.append((other, similarity))
+    above_threshold.sort(key=lambda pair: pair[1], reverse=True)
 
-        if verify_with_llm:
+    matches: list[DuplicateMatch] = []
+    for rank, (other, similarity) in enumerate(above_threshold):
+        if verify_with_llm and rank < settings.duplicate_llm_verification_top_n:
             relation, reason = await _verify_relation(
                 kind="人材", a=_candidate_fingerprint(candidate), b=_candidate_fingerprint(other)
             )
+        else:
+            relation, reason = "candidate", f"埋め込み類似度 {similarity:.2f} が閾値を超過"
 
         matches.append(DuplicateMatch(other_id=other.id, similarity=similarity, relation=relation, reason=reason))
 
-    matches.sort(key=lambda m: m.similarity, reverse=True)
     return matches
 
 

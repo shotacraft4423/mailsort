@@ -437,6 +437,24 @@ body {
   min-width: 220px;
 }
 
+.settings-key-input {
+  display: flex;
+  gap: 6px;
+}
+
+.settings-key-input input {
+  min-width: 180px;
+}
+
+.settings-key-input button {
+  border: 1px solid var(--border);
+  background: var(--accent);
+  color: white;
+  border-radius: 4px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+
 /* Reply composer */
 
 .reply-composer {

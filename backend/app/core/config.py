@@ -45,6 +45,19 @@ class Settings(BaseSettings):
     anonymize_before_send: bool = True
 
     duplicate_similarity_threshold: float = 0.86
+    # How many above-threshold candidates get an LLM verification call per
+    # duplicate-check run. Embedding similarity is cheap (or free, with the
+    # offline hash embedder); the LLM call is not — this bounds the worst
+    # case (many similar-looking deals/candidates) to a fixed cost instead
+    # of one call per match.
+    duplicate_llm_verification_top_n: int = 5
+
+    # Token-budget controls. Both cut input tokens on every AI call without
+    # changing what gets *stored* (the full body/attachment text is still
+    # saved to the DB; only what's sent to the LLM is capped). Defaults are
+    # sized for a low-cost model (gpt-4o-mini) on a metered/trial plan.
+    max_body_chars_for_ai: int = 4000
+    max_attachment_excerpt_chars: int = 1500
 
     request_timeout_seconds: float = 30.0
 

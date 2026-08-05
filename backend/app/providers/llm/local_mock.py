@@ -41,7 +41,9 @@ class LocalMockProvider(LLMProvider):
         # prompt is asking so each task gets a shape its caller actually
         # expects (see each service's DEFAULT_SYSTEM_PROMPT for the marker
         # strings matched below).
-        if "重複か判定" in system_prompt:
+        if "統合解析タスク" in system_prompt:
+            result = {"classification": self._classification_stub(user_prompt), "extraction": {}}
+        elif "重複か判定" in system_prompt:
             result = self._duplicate_stub()
         elif "マッチングアドバイザー" in system_prompt:
             result = self._matching_stub()

@@ -23,6 +23,16 @@ def render_template(template: str, context: dict[str, str]) -> str:
     return _VAR_RE.sub(lambda m: context.get(m.group(1), ""), template)
 
 
+def truncate_for_ai(text: str, limit: int) -> str:
+    """Caps text sent to the LLM (input tokens are billed; the full text is
+    still kept in the DB — this only shrinks what leaves the process). Adds
+    a visible marker rather than silently cutting, so the model doesn't
+    mistake a truncated email for a short one."""
+    if len(text) <= limit:
+        return text
+    return text[:limit] + f"\n…（以下 {len(text) - limit} 文字省略。トークン節約のため切り詰めています）"
+
+
 def get_active_prompt(db: Session, task: str) -> PromptVersion | None:
     template = (
         db.query(PromptTemplate)

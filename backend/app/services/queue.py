@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models.ai import AnalysisQueueItem
 from app.db.models.email import Message
-from app.services import classification_service, extraction_service, summarization_service
+from app.services import analysis_service, classification_service, extraction_service, summarization_service
 
 _MAX_ATTEMPTS = 3
 
@@ -48,7 +48,15 @@ async def process_next(db: Session) -> AnalysisQueueItem | None:
         return item
 
     try:
-        if item.task == "classify":
+        if item.task == "analyze":
+            # The automatic pipeline's default: one combined LLM call for
+            # both classification and extraction (see analysis_service's
+            # docstring for why this matters for token cost).
+            await analysis_service.analyze_message(db, message)
+        elif item.task == "classify":
+            # Kept for manual/standalone use (e.g. re-testing just the
+            # classification prompt in isolation); sync_service no longer
+            # enqueues this on its own.
             await classification_service.classify_message(db, message)
         elif item.task == "extract":
             await extraction_service.extract_message(db, message)
