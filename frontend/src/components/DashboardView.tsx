@@ -24,11 +24,28 @@ export function DashboardView() {
     { label: "対応中の人材", value: data.open_candidate_count },
   ];
 
+  const insights: { label: string; value: string }[] = [
+    { label: "返信率", value: formatPercent(data.reply_rate) },
+    { label: "平均返信速度", value: formatHours(data.avg_reply_speed_hours) },
+    { label: "案件成約率", value: formatPercent(data.deal_win_rate) },
+    { label: "週間コンタクト数", value: `${data.weekly_contact_frequency.toFixed(1)} 件/週` },
+  ];
+
   return (
     <div className="view-container">
       <h2>ダッシュボード</h2>
       <div className="stat-grid">
         {stats.map((s) => (
+          <div key={s.label} className="stat-card">
+            <div className="stat-value">{s.value}</div>
+            <div className="stat-label">{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      <h3>営業インサイト</h3>
+      <div className="stat-grid">
+        {insights.map((s) => (
           <div key={s.label} className="stat-card">
             <div className="stat-value">{s.value}</div>
             <div className="stat-label">{s.label}</div>
@@ -51,4 +68,14 @@ export function DashboardView() {
       )}
     </div>
   );
+}
+
+function formatPercent(value: number | null): string {
+  return value === null ? "データ不足" : `${Math.round(value * 100)}%`;
+}
+
+function formatHours(hours: number | null): string {
+  if (hours === null) return "データ不足";
+  if (hours < 24) return `${hours.toFixed(1)}時間`;
+  return `${(hours / 24).toFixed(1)}日`;
 }

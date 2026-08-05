@@ -16,6 +16,7 @@ from app.core.config import get_settings
 from app.db.models.email import Attachment, EmailAccount, Message
 from app.services import attachment_analysis_service, queue
 from app.services.mail.imap_client import FetchedMessage, ImapConnector
+from app.services.mail.threading_service import get_or_create_thread
 
 
 async def sync_account(db: Session, account: EmailAccount, *, folder: str = "INBOX", limit: int = 50) -> list[Message]:
@@ -33,6 +34,7 @@ async def sync_account(db: Session, account: EmailAccount, *, folder: str = "INB
             continue
 
         message = _to_message(account.id, folder, item)
+        message.thread_id = get_or_create_thread(db, account.id, item.subject).id
         db.add(message)
         db.flush()
 

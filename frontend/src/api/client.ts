@@ -58,6 +58,10 @@ export interface DashboardData {
   open_deal_count: number;
   open_candidate_count: number;
   top_companies: { name: string; deal_count: number }[];
+  reply_rate: number | null;
+  avg_reply_speed_hours: number | null;
+  deal_win_rate: number | null;
+  weekly_contact_frequency: number;
 }
 
 export interface AccountSummary {

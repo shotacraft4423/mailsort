@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -11,7 +11,7 @@ from app.api.deps import get_db
 from app.db.models.ai import AIAnalysis
 from app.db.models.company import Company
 from app.db.models.deal import Candidate, Deal
-from app.db.models.email import Message
+from app.services.insights_service import compute_insights
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -23,6 +23,14 @@ class DashboardOut(BaseModel):
     open_deal_count: int
     open_candidate_count: int
     top_companies: list[dict]
+
+    # 営業インサイト (DESIGN.md differentiator list). None means "not enough
+    # data yet" rather than 0, so the UI can show "データ不足" instead of a
+    # misleading zero.
+    reply_rate: float | None
+    avg_reply_speed_hours: float | None
+    deal_win_rate: float | None
+    weekly_contact_frequency: float
 
 
 @router.get("", response_model=DashboardOut)
@@ -50,6 +58,8 @@ def get_dashboard(db: Session = Depends(get_db)) -> DashboardOut:
         .all()
     )
 
+    insights = compute_insights(db)
+
     return DashboardOut(
         deals_today=deals_today,
         candidates_today=candidates_today,
@@ -57,4 +67,8 @@ def get_dashboard(db: Session = Depends(get_db)) -> DashboardOut:
         open_deal_count=open_deal_count,
         open_candidate_count=open_candidate_count,
         top_companies=[{"name": name, "deal_count": count} for name, count in top_companies_rows],
+        reply_rate=insights.reply_rate,
+        avg_reply_speed_hours=insights.avg_reply_speed_hours,
+        deal_win_rate=insights.deal_win_rate,
+        weekly_contact_frequency=insights.weekly_contact_frequency,
     )

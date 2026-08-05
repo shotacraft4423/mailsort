@@ -25,6 +25,20 @@ def _isolated_sqlite_db(monkeypatch):
     from app.core.config import get_settings
 
     get_settings.cache_clear()
+
+    # app.db.session.engine/SessionLocal are module-level singletons bound
+    # once at first import. Without rebinding them here, any test that goes
+    # through `TestClient(app)` (rather than the db_session fixture below,
+    # which always builds its own fresh engine) would silently share one
+    # database across the entire pytest session regardless of the env vars
+    # just set above — a real bug caught by test_send_reply_persistence.py
+    # once a second TestClient-based test file existed.
+    import app.db.session as db_session_module
+    from sqlalchemy.orm import sessionmaker as _sessionmaker
+
+    db_session_module.engine = db_session_module._make_engine()
+    db_session_module.SessionLocal = _sessionmaker(bind=db_session_module.engine, autoflush=False, autocommit=False)
+
     yield
     get_settings.cache_clear()
     if os.path.exists(db_path):

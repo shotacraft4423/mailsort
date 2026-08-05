@@ -14,6 +14,7 @@ from app.db.models.deal import Candidate, Deal
 from app.db.models.email import EmailAccount, Message
 from app.db.models.meeting import Meeting
 from app.services.mail import smtp_client, sync_service
+from app.services.mail.threading_service import get_or_create_thread
 
 router = APIRouter(prefix="/mail", tags=["mail"])
 
@@ -242,4 +243,31 @@ def send_reply(message_id: str, payload: SendRequest, db: Session = Depends(get_
         body_text=payload.body_text,
         in_reply_to=payload.in_reply_to,
     )
+
+    # Record the sent reply as a Message (folder="Sent") in the same
+    # thread as the message it replies to. Previously sent mail vanished
+    # from the DB entirely once smtplib returned — this is also what
+    # makes reply-rate / response-speed dashboard insights computable
+    # (see services/insights_service.py).
+    thread_id = message.thread_id or get_or_create_thread(db, account.id, message.subject).id
+    if message.thread_id is None:
+        message.thread_id = thread_id
+
+    sent_message = Message(
+        account_id=account.id,
+        thread_id=thread_id,
+        folder="Sent",
+        message_uid=f"sent-{message.id}-{datetime.utcnow().timestamp()}",
+        subject=payload.subject,
+        sender_name=account.display_name,
+        sender_address=account.email_address,
+        to_addresses=json.dumps(payload.to, ensure_ascii=False),
+        cc_addresses=json.dumps(payload.cc or [], ensure_ascii=False),
+        body_text=payload.body_text,
+        received_at=datetime.utcnow(),
+        is_read=True,
+    )
+    db.add(sent_message)
+    db.commit()
+
     return {"status": "sent"}
