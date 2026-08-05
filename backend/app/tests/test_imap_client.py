@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from email.message import EmailMessage
 
-from app.services.mail.imap_client import ImapConnector
+from app.services.mail.imap_client import ImapConnector, parse_list_response
 
 
 def _build_raw_message() -> bytes:
@@ -54,3 +54,27 @@ def test_parse_handles_missing_date_gracefully():
 
     assert parsed.received_at is None
     assert parsed.subject == "件名のみ"
+
+
+def test_parse_list_response_quoted_name():
+    assert parse_list_response(rb'(\HasNoChildren) "/" "INBOX"') == "INBOX"
+
+
+def test_parse_list_response_unquoted_name():
+    assert parse_list_response(rb'(\HasNoChildren) "/" INBOX') == "INBOX"
+
+
+def test_parse_list_response_nested_folder_with_slash_delimiter():
+    assert parse_list_response(rb'(\HasNoChildren) "/" "[Gmail]/Sent Mail"') == "[Gmail]/Sent Mail"
+
+
+def test_parse_list_response_nil_delimiter():
+    assert parse_list_response(rb'(\Noselect) NIL "Trash"') == "Trash"
+
+
+def test_parse_list_response_returns_none_for_malformed_line():
+    assert parse_list_response(b"not a list response at all") is None
+
+
+def test_parse_list_response_multiple_flags():
+    assert parse_list_response(rb'(\Noselect \HasChildren) "/" "[Gmail]"') == "[Gmail]"

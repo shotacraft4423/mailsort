@@ -25,7 +25,10 @@ export function MessageList({ messages, selectedId, onSelect }: Props) {
               <span className="received-at">{new Date(message.received_at).toLocaleDateString("ja-JP")}</span>
             )}
           </div>
-          <div className="subject">{message.subject || "(件名なし)"}</div>
+          <div className="subject">
+            {message.is_flagged && <span aria-label="フラグ付き">★ </span>}
+            {message.subject || "(件名なし)"}
+          </div>
         </li>
       ))}
     </ul>

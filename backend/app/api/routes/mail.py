@@ -89,6 +89,13 @@ def get_message(message_id: str, db: Session = Depends(get_db)) -> MessageDetail
     if message is None:
         raise HTTPException(status_code=404, detail="message not found")
 
+    # Standard mail-client behavior: opening a message marks it read. This
+    # was previously never set anywhere outside the Sent-copy path, so
+    # every inbound message stayed "unread" forever regardless of use.
+    if not message.is_read:
+        message.is_read = True
+        db.commit()
+
     analysis = db.query(AIAnalysis).filter(AIAnalysis.message_id == message_id).one_or_none()
     return MessageDetailOut(
         **MessageOut.model_validate(message).model_dump(),
@@ -99,6 +106,30 @@ def get_message(message_id: str, db: Session = Depends(get_db)) -> MessageDetail
         summary_3line=analysis.summary_3line if analysis else None,
         attachments=[AttachmentOut.model_validate(a) for a in message.attachments],
     )
+
+
+class MessageUpdate(BaseModel):
+    is_read: bool | None = None
+    is_flagged: bool | None = None
+    folder: str | None = None  # e.g. move to "Archive" / "Trash" / back to "INBOX"
+
+
+@router.patch("/{message_id}", response_model=MessageOut)
+def update_message(message_id: str, payload: MessageUpdate, db: Session = Depends(get_db)) -> Message:
+    message = db.query(Message).filter(Message.id == message_id).one_or_none()
+    if message is None:
+        raise HTTPException(status_code=404, detail="message not found")
+
+    if payload.is_read is not None:
+        message.is_read = payload.is_read
+    if payload.is_flagged is not None:
+        message.is_flagged = payload.is_flagged
+    if payload.folder is not None:
+        message.folder = payload.folder
+
+    db.commit()
+    db.refresh(message)
+    return message
 
 
 class RelatedCompanyOut(BaseModel):

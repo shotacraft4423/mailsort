@@ -49,7 +49,16 @@ export default function App() {
 
   useEffect(() => {
     if (!selectedId) return;
-    api.getMessage(selectedId).then(setSelectedMessage).catch(() => setSelectedMessage(null));
+    api
+      .getMessage(selectedId)
+      .then((detail) => {
+        setSelectedMessage(detail);
+        // The backend marks the message read as a side effect of fetching
+        // it; reflect that in the list immediately instead of waiting for
+        // a full reload, so the unread-bold styling updates right away.
+        setMessages((prev) => prev.map((m) => (m.id === detail.id ? { ...m, is_read: true } : m)));
+      })
+      .catch(() => setSelectedMessage(null));
     setReplying(false);
   }, [selectedId]);
 
@@ -84,6 +93,21 @@ export default function App() {
     } finally {
       setClassifying(false);
     }
+  };
+
+  const toggleFlag = async () => {
+    if (!selectedMessage) return;
+    const updated = await api.updateMessage(selectedMessage.id, { is_flagged: !selectedMessage.is_flagged });
+    setSelectedMessage({ ...selectedMessage, is_flagged: updated.is_flagged });
+    setMessages((prev) => prev.map((m) => (m.id === updated.id ? { ...m, is_flagged: updated.is_flagged } : m)));
+  };
+
+  const moveToFolder = async (targetFolder: string) => {
+    if (!selectedId) return;
+    await api.updateMessage(selectedId, { folder: targetFolder });
+    setSelectedId(null);
+    setSelectedMessage(null);
+    reloadMessages();
   };
 
   const runSearch = async () => {
@@ -193,6 +217,11 @@ export default function App() {
                       {classifying ? "分類中…" : selectedMessage.classification ? "再分類" : "AI分類を実行"}
                     </button>
                     <button onClick={() => setReplying(true)}>返信（r）</button>
+                    <button onClick={toggleFlag} aria-pressed={selectedMessage.is_flagged}>
+                      {selectedMessage.is_flagged ? "★ フラグ解除" : "☆ フラグ"}
+                    </button>
+                    <button onClick={() => moveToFolder("Archive")}>アーカイブ</button>
+                    <button onClick={() => moveToFolder("Trash")}>削除</button>
                   </div>
                   <p className="detail-meta">
                     {selectedMessage.sender_name} &lt;{selectedMessage.sender_address}&gt;

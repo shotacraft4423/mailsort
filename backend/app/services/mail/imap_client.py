@@ -10,12 +10,42 @@ from __future__ import annotations
 
 import email
 import imaplib
+import re
 from dataclasses import dataclass
 from email.header import decode_header
 from email.utils import parsedate_to_datetime
 
 from app.core.security import decrypt_secret
 from app.db.models.email import EmailAccount
+
+# Matches an IMAP LIST response line: (flags) "delimiter" name
+# e.g. `(\HasNoChildren) "/" "INBOX"` or `(\Noselect \HasChildren) "/" INBOX`
+# (name may or may not be quoted, delimiter may be NIL).
+_LIST_RESPONSE_RE = re.compile(rb'^\(([^)]*)\)\s+("(?:[^"\\]|\\.)*"|NIL)\s+(.+)$')
+
+
+def _decode_mailbox_name(raw: bytes) -> str:
+    try:
+        return raw.decode("ascii")
+    except UnicodeDecodeError:
+        # Non-ASCII IMAP folder names use modified UTF-7 (RFC 3501), which
+        # isn't implemented here — falling back to a lossy UTF-8 decode
+        # keeps folder listing from crashing at the cost of possibly
+        # mangled non-ASCII folder names.
+        return raw.decode("utf-8", errors="replace")
+
+
+def parse_list_response(raw: bytes) -> str | None:
+    """Parses one line of an IMAP LIST response into a folder name, or None
+    if the line doesn't match the expected shape (kept as a standalone
+    function so it's testable without a real IMAP server)."""
+    match = _LIST_RESPONSE_RE.match(raw)
+    if not match:
+        return None
+    name_part = match.group(3).strip()
+    if name_part.startswith(b'"') and name_part.endswith(b'"'):
+        name_part = name_part[1:-1]
+    return _decode_mailbox_name(name_part)
 
 
 @dataclass
@@ -47,6 +77,23 @@ class ImapConnector:
 
     def __init__(self, account: EmailAccount) -> None:
         self.account = account
+
+    def list_folders(self) -> list[str]:
+        password = decrypt_secret(self.account.credential_encrypted) if self.account.credential_encrypted else ""
+        conn_cls = imaplib.IMAP4_SSL if self.account.use_ssl else imaplib.IMAP4
+        conn = conn_cls(self.account.imap_host, self.account.imap_port or (993 if self.account.use_ssl else 143))
+        try:
+            conn.login(self.account.email_address, password)
+            status, data = conn.list()
+            if status != "OK":
+                return []
+            names = [parse_list_response(raw) for raw in data if raw]
+            return [name for name in names if name is not None]
+        finally:
+            try:
+                conn.logout()
+            except Exception:  # noqa: BLE001 - best-effort cleanup
+                pass
 
     def fetch_new(self, folder: str = "INBOX", limit: int = 50) -> list[FetchedMessage]:
         password = decrypt_secret(self.account.credential_encrypted) if self.account.credential_encrypted else ""

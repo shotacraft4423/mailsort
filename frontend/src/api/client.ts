@@ -309,6 +309,8 @@ export const api = {
   getMessage: (id: string) => request<MessageDetail>(`/mail/${id}`),
   getRelated: (id: string) => request<RelatedData>(`/mail/${id}/related`),
   getAuditLog: (id: string) => request<AuditLogEntry[]>(`/mail/${id}/audit-log`),
+  updateMessage: (id: string, input: { is_read?: boolean; is_flagged?: boolean; folder?: string }) =>
+    request<MessageSummary>(`/mail/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
   registerBusinessCard: (attachmentId: string) =>
     request<BusinessCardContact>(`/mail/attachments/${attachmentId}/register-business-card`, { method: "POST" }),
   syncAccount: (accountId: string, folder = "INBOX") =>
@@ -348,6 +350,7 @@ export const api = {
   dashboard: () => request<DashboardData>("/dashboard"),
 
   listAccounts: () => request<AccountSummary[]>("/accounts"),
+  getAccountFolders: (accountId: string) => request<string[]>(`/accounts/${accountId}/folders`),
   createAccount: (input: AccountCreateInput) =>
     request<AccountSummary>("/accounts", { method: "POST", body: JSON.stringify(input) }),
   deleteAccount: (id: string) => request<{ status: string }>(`/accounts/${id}`, { method: "DELETE" }),

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import imaplib
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -7,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db
 from app.core.security import encrypt_secret
 from app.db.models.email import EmailAccount
+from app.services.mail.imap_client import ImapConnector
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
@@ -58,6 +62,25 @@ def create_account(payload: AccountCreate, db: Session = Depends(get_db)) -> Ema
     db.commit()
     db.refresh(account)
     return account
+
+
+@router.get("/{account_id}/folders", response_model=list[str])
+async def list_folders(account_id: str, db: Session = Depends(get_db)) -> list[str]:
+    """Real IMAP folder listing (LIST command), replacing what used to be a
+    hardcoded folder list in the frontend. Runs the blocking imaplib call in
+    a worker thread, same as sync — a real IMAP round trip, so this is also
+    the first place account misconfiguration (bad host/credentials) shows
+    up as a clear error rather than a mysterious empty inbox."""
+    account = db.query(EmailAccount).filter(EmailAccount.id == account_id).one_or_none()
+    if account is None:
+        raise HTTPException(status_code=404, detail="account not found")
+    if not account.imap_host:
+        raise HTTPException(status_code=400, detail="account has no imap_host configured")
+
+    try:
+        return await asyncio.to_thread(ImapConnector(account).list_folders)
+    except (imaplib.IMAP4.error, OSError) as exc:
+        raise HTTPException(status_code=502, detail=f"IMAPサーバーへの接続に失敗しました: {exc}") from exc
 
 
 @router.delete("/{account_id}")
