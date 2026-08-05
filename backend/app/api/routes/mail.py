@@ -47,6 +47,8 @@ class AttachmentOut(BaseModel):
 class MessageDetailOut(MessageOut):
     body_text: str
     body_html: str
+    to_addresses: list[str] = []
+    cc_addresses: list[str] = []
     classification: dict | None = None
     extraction: dict | None = None
     summary_3line: str | None = None
@@ -97,10 +99,19 @@ def get_message(message_id: str, db: Session = Depends(get_db)) -> MessageDetail
         db.commit()
 
     analysis = db.query(AIAnalysis).filter(AIAnalysis.message_id == message_id).one_or_none()
+
+    def _parse_addresses(raw: str) -> list[str]:
+        try:
+            return json.loads(raw) if raw else []
+        except json.JSONDecodeError:
+            return []
+
     return MessageDetailOut(
         **MessageOut.model_validate(message).model_dump(),
         body_text=message.body_text,
         body_html=message.body_html,
+        to_addresses=_parse_addresses(message.to_addresses),
+        cc_addresses=_parse_addresses(message.cc_addresses),
         classification=json.loads(analysis.classification_json) if analysis and analysis.classification_json else None,
         extraction=json.loads(analysis.extraction_json) if analysis and analysis.extraction_json else None,
         summary_3line=analysis.summary_3line if analysis else None,
@@ -283,8 +294,31 @@ def save_draft(payload: DraftCreate, db: Session = Depends(get_db)) -> Message:
     return message
 
 
+@router.put("/draft/{message_id}", response_model=MessageOut)
+def update_draft(message_id: str, payload: DraftCreate, db: Session = Depends(get_db)) -> Message:
+    """Updates an existing draft in place (used by "編集を続ける" in the UI)
+    instead of the old behavior of only ever being able to create a new
+    draft — every incremental save used to leave the previous version
+    behind as an orphaned Drafts-folder row."""
+    message = db.query(Message).filter(Message.id == message_id, Message.folder == "Drafts").one_or_none()
+    if message is None:
+        raise HTTPException(status_code=404, detail="draft not found")
+
+    message.account_id = payload.account_id
+    message.subject = payload.subject
+    message.to_addresses = json.dumps(payload.to, ensure_ascii=False)
+    message.cc_addresses = json.dumps(payload.cc, ensure_ascii=False)
+    message.body_text = payload.body_text
+    db.commit()
+    db.refresh(message)
+    return message
+
+
 @router.post("/{message_id}/send")
 def send_reply(message_id: str, payload: SendRequest, db: Session = Depends(get_db)) -> dict:
+    """Sends a reply to an existing message, or — when message_id points at
+    a Drafts-folder message — sends that draft, after which the draft row
+    is deleted (its content now lives on as the Sent-folder copy below)."""
     message = db.query(Message).filter(Message.id == message_id).one_or_none()
     if message is None:
         raise HTTPException(status_code=404, detail="message not found")
@@ -301,11 +335,12 @@ def send_reply(message_id: str, payload: SendRequest, db: Session = Depends(get_
         in_reply_to=payload.in_reply_to,
     )
 
-    # Record the sent reply as a Message (folder="Sent") in the same
-    # thread as the message it replies to. Previously sent mail vanished
-    # from the DB entirely once smtplib returned — this is also what
-    # makes reply-rate / response-speed dashboard insights computable
-    # (see services/insights_service.py).
+    # Record the sent message as a Message (folder="Sent") in the same
+    # thread as the message it replies to (or a fresh thread, for a
+    # from-scratch draft). Previously sent mail vanished from the DB
+    # entirely once smtplib returned — this is also what makes
+    # reply-rate / response-speed dashboard insights computable (see
+    # services/insights_service.py).
     thread_id = message.thread_id or get_or_create_thread(db, account.id, message.subject).id
     if message.thread_id is None:
         message.thread_id = thread_id
@@ -325,6 +360,11 @@ def send_reply(message_id: str, payload: SendRequest, db: Session = Depends(get_
         is_read=True,
     )
     db.add(sent_message)
+
+    was_draft = message.folder == "Drafts"
+    if was_draft:
+        db.delete(message)
+
     db.commit()
 
     return {"status": "sent"}

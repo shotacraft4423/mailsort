@@ -213,10 +213,16 @@ export default function App() {
                 <>
                   <div className="detail-toolbar">
                     <h2>{selectedMessage.subject || "(件名なし)"}</h2>
-                    <button onClick={runClassify} disabled={classifying}>
-                      {classifying ? "分類中…" : selectedMessage.classification ? "再分類" : "AI分類を実行"}
-                    </button>
-                    <button onClick={() => setReplying(true)}>返信（r）</button>
+                    {selectedMessage.folder === "Drafts" ? (
+                      <button onClick={() => setReplying(true)}>編集を続ける（r）</button>
+                    ) : (
+                      <>
+                        <button onClick={runClassify} disabled={classifying}>
+                          {classifying ? "分類中…" : selectedMessage.classification ? "再分類" : "AI分類を実行"}
+                        </button>
+                        <button onClick={() => setReplying(true)}>返信（r）</button>
+                      </>
+                    )}
                     <button onClick={toggleFlag} aria-pressed={selectedMessage.is_flagged}>
                       {selectedMessage.is_flagged ? "★ フラグ解除" : "☆ フラグ"}
                     </button>

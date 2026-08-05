@@ -9,20 +9,22 @@ interface Props {
 }
 
 export function ReplyComposer({ message, onClose, onSent }: Props) {
+  const isDraftEdit = message.folder === "Drafts";
+
   const [tones, setTones] = useState<string[]>([]);
   const [tone, setTone] = useState<string>("丁寧");
-  const [to, setTo] = useState(message.sender_address);
+  const [to, setTo] = useState(isDraftEdit ? message.to_addresses.join(", ") : message.sender_address);
   const [subject, setSubject] = useState(
-    message.subject.startsWith("Re:") ? message.subject : `Re: ${message.subject}`
+    isDraftEdit ? message.subject : message.subject.startsWith("Re:") ? message.subject : `Re: ${message.subject}`
   );
-  const [body, setBody] = useState("");
+  const [body, setBody] = useState(isDraftEdit ? message.body_text : "");
   const [generating, setGenerating] = useState(false);
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
   useEffect(() => {
-    api.replyTones().then(setTones).catch(() => setTones([]));
-  }, []);
+    if (!isDraftEdit) api.replyTones().then(setTones).catch(() => setTones([]));
+  }, [isDraftEdit]);
 
   const generate = async (selectedTone: string) => {
     setTone(selectedTone);
@@ -38,10 +40,20 @@ export function ReplyComposer({ message, onClose, onSent }: Props) {
     }
   };
 
+  const toList = () =>
+    to
+      .split(",")
+      .map((addr) => addr.trim())
+      .filter(Boolean);
+
   const saveDraft = async () => {
     setSending(true);
     try {
-      await api.saveDraft({ account_id: message.account_id, to: [to], subject, body_text: body });
+      if (isDraftEdit) {
+        await api.updateDraft(message.id, { account_id: message.account_id, to: toList(), subject, body_text: body });
+      } else {
+        await api.saveDraft({ account_id: message.account_id, to: toList(), subject, body_text: body });
+      }
       setStatus("下書きを保存しました。");
     } finally {
       setSending(false);
@@ -52,7 +64,12 @@ export function ReplyComposer({ message, onClose, onSent }: Props) {
     setSending(true);
     setStatus(null);
     try {
-      await api.sendReply(message.id, { to: [to], subject, body_text: body, in_reply_to: message.id });
+      await api.sendReply(message.id, {
+        to: toList(),
+        subject,
+        body_text: body,
+        in_reply_to: isDraftEdit ? undefined : message.id,
+      });
       setStatus("送信しました。");
       onSent();
     } catch {
@@ -65,24 +82,26 @@ export function ReplyComposer({ message, onClose, onSent }: Props) {
   return (
     <div className="reply-composer">
       <div className="reply-header">
-        <h3>返信を作成</h3>
+        <h3>{isDraftEdit ? "下書きを編集" : "返信を作成"}</h3>
         <button className="reply-close" onClick={onClose} aria-label="閉じる">
           ×
         </button>
       </div>
 
-      <div className="reply-tones">
-        {(tones.length > 0 ? tones : ["丁寧", "普通", "営業", "フレンドリー", "断る", "日程調整", "お礼", "催促", "確認", "謝罪"]).map(
-          (t) => (
-            <button key={t} className={`tone-chip ${t === tone ? "active" : ""}`} onClick={() => generate(t)} disabled={generating}>
-              {t}
-            </button>
-          )
-        )}
-      </div>
+      {!isDraftEdit && (
+        <div className="reply-tones">
+          {(tones.length > 0 ? tones : ["丁寧", "普通", "営業", "フレンドリー", "断る", "日程調整", "お礼", "催促", "確認", "謝罪"]).map(
+            (t) => (
+              <button key={t} className={`tone-chip ${t === tone ? "active" : ""}`} onClick={() => generate(t)} disabled={generating}>
+                {t}
+              </button>
+            )
+          )}
+        </div>
+      )}
 
       <label className="reply-field">
-        宛先
+        宛先（複数はカンマ区切り）
         <input value={to} onChange={(e) => setTo(e.target.value)} />
       </label>
       <label className="reply-field">
@@ -100,7 +119,7 @@ export function ReplyComposer({ message, onClose, onSent }: Props) {
         <button onClick={saveDraft} disabled={sending || generating}>
           下書き保存
         </button>
-        <button className="primary" onClick={send} disabled={sending || generating || !body.trim()}>
+        <button className="primary" onClick={send} disabled={sending || generating || !body.trim() || toList().length === 0}>
           {sending ? "送信中…" : "送信"}
         </button>
       </div>

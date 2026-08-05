@@ -55,6 +55,8 @@ export interface BusinessCardContact {
 export interface MessageDetail extends MessageSummary {
   body_text: string;
   body_html: string;
+  to_addresses: string[];
+  cc_addresses: string[];
   classification: Record<string, unknown> | null;
   extraction: Record<string, unknown> | null;
   summary_3line: string | null;
@@ -319,6 +321,10 @@ export const api = {
     }),
   saveDraft: (input: { account_id: string; to: string[]; cc?: string[]; subject: string; body_text: string }) =>
     request<MessageSummary>(`/mail/draft`, { method: "POST", body: JSON.stringify(input) }),
+  updateDraft: (
+    id: string,
+    input: { account_id: string; to: string[]; cc?: string[]; subject: string; body_text: string }
+  ) => request<MessageSummary>(`/mail/draft/${id}`, { method: "PUT", body: JSON.stringify(input) }),
   sendReply: (
     messageId: string,
     input: { to: string[]; cc?: string[]; subject: string; body_text: string; in_reply_to?: string }
