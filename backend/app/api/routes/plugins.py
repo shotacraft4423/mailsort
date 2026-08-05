@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -7,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
-from app.core.security import encrypt_secret
+from app.core.security import decrypt_secret, encrypt_secret
 from app.db.models.plugin import PluginConfig
 from app.services import plugin_manager
 
@@ -26,6 +27,23 @@ class PluginOut(BaseModel):
 class PluginConfigUpdate(BaseModel):
     is_enabled: bool
     config: dict = {}
+
+
+def load_enabled_plugin_configs(db: Session) -> dict[str, dict]:
+    """Single source of truth for "which plugins are enabled and with what
+    config" — used both when the admin UI toggles a plugin and when the app
+    starts up (main.py's lifespan), so the in-memory plugin registry always
+    matches what's persisted in PluginConfig."""
+    configs: dict[str, dict] = {}
+    for row in db.query(PluginConfig).filter(PluginConfig.is_enabled.is_(True)).all():
+        if not row.config_json_encrypted:
+            configs[row.plugin_key] = {}
+            continue
+        try:
+            configs[row.plugin_key] = json.loads(decrypt_secret(row.config_json_encrypted))
+        except (ValueError, json.JSONDecodeError):
+            configs[row.plugin_key] = {}
+    return configs
 
 
 @router.get("", response_model=list[PluginOut])
@@ -50,12 +68,9 @@ def update_plugin(plugin_key: str, payload: PluginConfigUpdate, db: Session = De
         config = PluginConfig(plugin_key=plugin_key)
         db.add(config)
     config.is_enabled = payload.is_enabled
-    import json
-
     config.config_json_encrypted = encrypt_secret(json.dumps(payload.config, ensure_ascii=False))
     db.commit()
 
-    enabled_keys = {c.plugin_key for c in db.query(PluginConfig).filter(PluginConfig.is_enabled.is_(True)).all()}
-    plugin_manager.reload_plugins(PLUGINS_DIR, enabled_keys)
+    plugin_manager.reload_plugins(PLUGINS_DIR, load_enabled_plugin_configs(db))
 
     return PluginOut(key=manifest.key, name=manifest.name, version=manifest.version, is_enabled=config.is_enabled)

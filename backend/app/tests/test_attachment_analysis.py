@@ -17,6 +17,22 @@ def test_classify_kind_falls_back_to_extracted_text_when_filename_is_generic():
     assert svc.classify_kind(file_name="document.pdf", extracted_text="本書は個別契約書として...") == "contract"
 
 
+def test_classify_kind_detects_business_card_from_image_with_contact_info():
+    ocr_text = "株式会社サンプル\n営業部 田中太郎\nTEL: 03-1234-5678\nEmail: tanaka@example.com"
+    assert svc.classify_kind(file_name="IMG_0001.jpg", extracted_text=ocr_text, content_type="image/jpeg") == "business_card"
+
+
+def test_classify_kind_image_without_contact_info_is_not_business_card():
+    assert svc.classify_kind(file_name="photo.jpg", extracted_text="", content_type="image/jpeg") == "other"
+
+
+def test_classify_kind_non_image_with_contact_info_is_not_business_card():
+    # A regular document can contain a phone number too — only images
+    # should ever be considered for the business_card heuristic.
+    text = "会議の議事録です。連絡先は 03-1234-5678 までお願いします。"
+    assert svc.classify_kind(file_name="minutes.pdf", extracted_text=text, content_type="application/pdf") == "other"
+
+
 def test_extract_text_docx_round_trip():
     import docx
 

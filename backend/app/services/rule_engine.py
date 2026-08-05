@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.db.models.ai import AIAnalysis
 from app.db.models.email import Message
 from app.db.models.rule import Rule
+from app.db.models.tag import MessageTag, Tag
 
 _FIELD_GETTERS = {
     "subject": lambda m, a: m.subject,
@@ -68,3 +69,43 @@ def evaluate_rules(db: Session, message: Message, analysis: AIAnalysis | None) -
             fired.append(RuleFireResult(rule=rule, actions=json.loads(rule.actions_json or "[]")))
 
     return fired
+
+
+def apply_actions(db: Session, message: Message, fired: list[RuleFireResult]) -> None:
+    """Executes what evaluate_rules() found. Only "tag" is a built-in
+    action today (adds a MessageTag with source="rule", confidence 1.0 —
+    a rule match is a certainty, not a probabilistic guess). Any other
+    action type (e.g. "notify_slack", "webhook") is left for a plugin to
+    interpret: see services/plugin_manager.py's dispatch, which runs
+    alongside this and receives the same message/classification — a
+    matched rule with an unrecognized action type is a no-op here rather
+    than an error, since plugins are the intended extension point.
+    """
+    if not fired:
+        return
+
+    for result in fired:
+        for action in result.actions:
+            if action.get("type") == "tag":
+                _apply_tag_action(db, message, action.get("params", {}).get("tag"))
+
+    db.commit()
+
+
+def _apply_tag_action(db: Session, message: Message, tag_name: str | None) -> None:
+    if not tag_name:
+        return
+
+    tag = db.query(Tag).filter(Tag.name == tag_name).one_or_none()
+    if tag is None:
+        tag = Tag(name=tag_name)
+        db.add(tag)
+        db.flush()
+
+    existing = (
+        db.query(MessageTag)
+        .filter(MessageTag.message_id == message.id, MessageTag.tag_id == tag.id)
+        .one_or_none()
+    )
+    if existing is None:
+        db.add(MessageTag(message_id=message.id, tag_id=tag.id, confidence=1.0, source="rule"))

@@ -16,6 +16,7 @@ individually — this module builds on top of them rather than replacing them.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass
 
@@ -30,7 +31,7 @@ from app.providers.llm.local_mock import LocalMockProvider
 from app.providers.llm.registry import get_llm_provider
 from app.schemas.classification import ClassificationResult
 from app.schemas.extraction import ExtractionResult
-from app.services import classification_service, extraction_service
+from app.services import classification_service, extraction_service, plugin_manager, rule_engine
 from app.services.feedback_service import build_few_shot_suffix, get_similar_corrections
 from app.services.prompt_service import get_active_prompt, render_template
 
@@ -81,9 +82,11 @@ async def analyze_message(db: Session, message: Message, *, force: bool = False)
 
     existing = db.query(AIAnalysis).filter(AIAnalysis.message_id == message.id).one_or_none()
     if existing and existing.content_hash == hash_input and not force:
+        cached_classification = ClassificationResult.model_validate(json.loads(existing.classification_json or "{}"))
+        await _run_rules_and_plugins(db, message, existing, cached_classification)
         return AnalysisOutcome(
             analysis=existing,
-            classification=ClassificationResult.model_validate(json.loads(existing.classification_json or "{}")),
+            classification=cached_classification,
             extraction=ExtractionResult.model_validate(json.loads(existing.extraction_json or "{}")),
             from_cache=True,
             is_fallback=existing.is_fallback,
@@ -139,6 +142,30 @@ async def analyze_message(db: Session, message: Message, *, force: bool = False)
     )
     db.commit()
 
+    await _run_rules_and_plugins(db, message, analysis, classification)
+
     return AnalysisOutcome(
         analysis=analysis, classification=classification, extraction=extraction, from_cache=False, is_fallback=is_fallback
+    )
+
+
+async def _run_rules_and_plugins(
+    db: Session, message: Message, analysis: AIAnalysis, classification: ClassificationResult
+) -> None:
+    """Rules and plugins were configurable via the GUI (/rules, /plugins)
+    but nothing in the pipeline ever called evaluate_rules() or
+    dispatch_message_classified() — they were persisted and silently
+    ignored. This is the wiring that makes them actually fire on every
+    classified message, cached or fresh."""
+    fired = rule_engine.evaluate_rules(db, message, analysis)
+    rule_engine.apply_actions(db, message, fired)
+
+    # Plugin hooks are arbitrary third-party code (see plugins/sample_slack_
+    # notifier, which does a blocking network call) — running them on the
+    # event loop thread would stall every other in-flight request, so this
+    # goes through a worker thread same as the blocking IMAP calls do.
+    await asyncio.to_thread(
+        plugin_manager.dispatch_message_classified,
+        {"id": message.id, "subject": message.subject, "sender_address": message.sender_address},
+        classification.model_dump(),
     )

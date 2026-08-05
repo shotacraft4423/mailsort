@@ -61,7 +61,7 @@ def discover(plugins_dir: Path) -> list[PluginManifest]:
     return manifests
 
 
-def _load_entrypoint(manifest: PluginManifest) -> Plugin:
+def _load_entrypoint(manifest: PluginManifest, config: dict[str, Any]) -> Plugin:
     module_name, class_name = manifest.entrypoint.split(":")
     module_path = manifest.path / f"{module_name}.py"
     spec = importlib.util.spec_from_file_location(f"mailsort_plugin_{manifest.key}", module_path)
@@ -71,16 +71,22 @@ def _load_entrypoint(manifest: PluginManifest) -> Plugin:
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     plugin_class = getattr(module, class_name)
-    return plugin_class()
+    return plugin_class(config)
 
 
-def reload_plugins(plugins_dir: Path, enabled_keys: set[str]) -> PluginRegistry:
+def reload_plugins(plugins_dir: Path, enabled_configs: dict[str, dict[str, Any]]) -> PluginRegistry:
+    """`enabled_configs` maps plugin key -> its decrypted config dict; a key
+    absent from this mapping is treated as disabled. Passing the config
+    through (rather than a bare set of enabled keys) is what makes
+    PluginConfig.config_json_encrypted — e.g. a Slack webhook URL entered in
+    the admin UI — actually reach the plugin instance instead of being
+    stored and silently ignored."""
     global _registry
     manifests = {m.key: m for m in discover(plugins_dir)}
     instances = {}
     for key, manifest in manifests.items():
-        if key in enabled_keys:
-            instances[key] = _load_entrypoint(manifest)
+        if key in enabled_configs:
+            instances[key] = _load_entrypoint(manifest, enabled_configs[key])
     _registry = PluginRegistry(manifests=manifests, instances=instances)
     return _registry
 

@@ -19,7 +19,7 @@ import re
 import zipfile
 from dataclasses import dataclass
 
-AttachmentKind = str  # skill_sheet | project_brief | invoice | contract | resume | other
+AttachmentKind = str  # skill_sheet | project_brief | invoice | contract | resume | business_card | other
 
 _KIND_KEYWORDS: dict[str, list[str]] = {
     "skill_sheet": ["スキルシート", "skill sheet", "経歴書", "職務経歴"],
@@ -28,6 +28,14 @@ _KIND_KEYWORDS: dict[str, list[str]] = {
     "project_brief": ["案件票", "案件概要", "募集要項"],
     "resume": ["履歴書", "resume", "cv"],
 }
+
+# Business cards have no reliable filename/keyword signal (they're a photo
+# or scan) — the only usable signal is "this is an image, and OCR found
+# something that looks like contact info" (an email address or a phone
+# number). Loose on purpose: false positives just mean an unnecessary
+# "名刺として登録" button offer in the UI, not a data-corrupting action.
+_EMAIL_HINT_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
+_PHONE_HINT_RE = re.compile(r"0\d{1,4}[-‐]\d{1,4}[-‐]\d{3,4}")
 
 
 @dataclass
@@ -168,15 +176,20 @@ def extract_text(*, file_name: str, content_type: str, data: bytes) -> str:
     return extractor(data).strip()
 
 
-def classify_kind(*, file_name: str, extracted_text: str) -> AttachmentKind:
+def classify_kind(*, file_name: str, extracted_text: str, content_type: str = "") -> AttachmentKind:
     haystack = f"{file_name}\n{extracted_text[:2000]}".lower()
     for kind, keywords in _KIND_KEYWORDS.items():
         if any(re.search(re.escape(kw.lower()), haystack) for kw in keywords):
             return kind
+
+    resolved = _resolve_content_type(file_name, content_type)
+    if resolved.startswith("image/") and (_EMAIL_HINT_RE.search(extracted_text) or _PHONE_HINT_RE.search(extracted_text)):
+        return "business_card"
+
     return "other"
 
 
 def analyze(*, file_name: str, content_type: str, data: bytes) -> AttachmentAnalysis:
     text = extract_text(file_name=file_name, content_type=content_type, data=data)
-    kind = classify_kind(file_name=file_name, extracted_text=text)
+    kind = classify_kind(file_name=file_name, extracted_text=text, content_type=content_type)
     return AttachmentAnalysis(kind=kind, extracted_text=text)
