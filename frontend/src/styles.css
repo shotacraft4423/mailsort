@@ -591,6 +591,16 @@ body {
   font-size: 11px;
 }
 
+.attachment-action-button {
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--accent);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
 /* AI panel related-data tabs */
 
 .related-info {

@@ -206,6 +206,7 @@ export default function App() {
                             <span className="attachment-kind-badge">{a.classified_kind}</span>
                           )}
                           <span className="attachment-size">{Math.ceil(a.size_bytes / 1024)} KB</span>
+                          {a.classified_kind === "business_card" && <BusinessCardButton attachmentId={a.id} />}
                         </li>
                       ))}
                     </ul>
@@ -221,5 +222,26 @@ export default function App() {
         </div>
       )}
     </div>
+  );
+}
+
+function BusinessCardButton({ attachmentId }: { attachmentId: string }) {
+  const [status, setStatus] = useState<"idle" | "saving" | "done" | "error">("idle");
+
+  const register = async () => {
+    setStatus("saving");
+    try {
+      await api.registerBusinessCard(attachmentId);
+      setStatus("done");
+    } catch {
+      setStatus("error");
+    }
+  };
+
+  if (status === "done") return <span className="attachment-kind-badge">登録済み</span>;
+  return (
+    <button onClick={register} disabled={status === "saving"} className="attachment-action-button">
+      {status === "saving" ? "登録中…" : status === "error" ? "失敗（再試行）" : "名刺として登録"}
+    </button>
   );
 }

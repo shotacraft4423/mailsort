@@ -9,10 +9,11 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.db.models.ai import AIAnalysis, AuditLogEntry
-from app.db.models.company import Company
+from app.db.models.company import Company, Contact
 from app.db.models.deal import Candidate, Deal
-from app.db.models.email import EmailAccount, Message
+from app.db.models.email import Attachment, EmailAccount, Message
 from app.db.models.meeting import Meeting
+from app.services import business_card_service
 from app.services.mail import smtp_client, sync_service
 from app.services.mail.threading_service import get_or_create_thread
 
@@ -197,6 +198,31 @@ def get_audit_log(message_id: str, db: Session = Depends(get_db)) -> list[AuditL
         .order_by(AuditLogEntry.created_at.desc())
         .all()
     )
+
+
+class BusinessCardContactOut(BaseModel):
+    id: str
+    company_id: str | None
+    name: str
+    email_address: str
+    phone: str | None
+    department: str | None
+    title: str | None
+
+    model_config = {"from_attributes": True}
+
+
+@router.post("/attachments/{attachment_id}/register-business-card", response_model=BusinessCardContactOut)
+async def register_business_card(attachment_id: str, db: Session = Depends(get_db)) -> Contact:
+    """名刺OCR → CRM登録: uses the attachment's already-OCR'd text (see
+    attachment_analysis_service; empty if tesseract isn't installed) to
+    extract contact fields and upsert a Company/Contact pair."""
+    attachment = db.query(Attachment).filter(Attachment.id == attachment_id).one_or_none()
+    if attachment is None:
+        raise HTTPException(status_code=404, detail="attachment not found")
+
+    fields = await business_card_service.extract_fields(attachment.extracted_text or "")
+    return business_card_service.upsert_from_business_card(db, fields)
 
 
 @router.post("/accounts/{account_id}/sync", response_model=list[MessageOut])

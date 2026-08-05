@@ -30,6 +30,10 @@ uvicorn app.main:app --reload --port 8000
 - 初回起動時に SQLite DB (`mailsort.db`) が自動作成されます。
 - デフォルトでは `MAILSORT_AI_ENABLED=true` / `MAILSORT_LLM_PROVIDER=local_mock` で起動し、
   外部APIキーなしでもキーワードベースの分類で動作します（非機能要件: AI無効でも通常のメーラーとして使用可）。
+- 名刺OCR/画像添付のOCRには `pytesseract` と Tesseract 本体（OS側インストールが必要）が必要です。
+  未インストールでもアプリは正常に動作し、OCRテキストが空のまま扱われるだけです
+  (`services/attachment_analysis_service.py` 参照)。Ubuntu: `apt install tesseract-ocr tesseract-ocr-jpn`、
+  `pip install pytesseract pillow`。
 - 実際のAIプロバイダーを使う場合は環境変数（`.env` または OS環境変数）で設定します。例:
 
 ```bash

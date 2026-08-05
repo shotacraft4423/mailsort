@@ -42,6 +42,16 @@ export interface AttachmentInfo {
   classified_kind: string | null;
 }
 
+export interface BusinessCardContact {
+  id: string;
+  company_id: string | null;
+  name: string;
+  email_address: string;
+  phone: string | null;
+  department: string | null;
+  title: string | null;
+}
+
 export interface MessageDetail extends MessageSummary {
   body_text: string;
   body_html: string;
@@ -299,6 +309,8 @@ export const api = {
   getMessage: (id: string) => request<MessageDetail>(`/mail/${id}`),
   getRelated: (id: string) => request<RelatedData>(`/mail/${id}/related`),
   getAuditLog: (id: string) => request<AuditLogEntry[]>(`/mail/${id}/audit-log`),
+  registerBusinessCard: (attachmentId: string) =>
+    request<BusinessCardContact>(`/mail/attachments/${attachmentId}/register-business-card`, { method: "POST" }),
   syncAccount: (accountId: string, folder = "INBOX") =>
     request<MessageSummary[]>(`/mail/accounts/${accountId}/sync?folder=${encodeURIComponent(folder)}`, {
       method: "POST",
