@@ -1,0 +1,7 @@
+{
+  "key": "sample_slack_notifier",
+  "name": "Slack通知（サンプル）",
+  "version": "0.1.0",
+  "entrypoint": "notifier:SlackNotifierPlugin",
+  "description": "重要または要返信タグが付いたメールをSlack Webhookへ通知するサンプルプラグイン。plugins/README.mdを参照。"
+}
