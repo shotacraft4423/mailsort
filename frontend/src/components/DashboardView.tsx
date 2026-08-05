@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import type { DashboardData } from "../api/client";
+import type { DashboardData, RemindersData } from "../api/client";
 import { api } from "../api/client";
 
 export function DashboardView() {
   const [data, setData] = useState<DashboardData | null>(null);
+  const [reminders, setReminders] = useState<RemindersData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -11,6 +12,7 @@ export function DashboardView() {
       .dashboard()
       .then(setData)
       .catch(() => setError("ダッシュボードを取得できませんでした。"));
+    api.reminders().then(setReminders).catch(() => setReminders(null));
   }, []);
 
   if (error) return <div className="view-container">{error}</div>;
@@ -34,6 +36,23 @@ export function DashboardView() {
   return (
     <div className="view-container">
       <h2>ダッシュボード</h2>
+
+      {reminders && reminders.recommended_actions.length > 0 && (
+        <>
+          <h3>AIおすすめ対応順</h3>
+          <ol className="recommended-actions">
+            {reminders.recommended_actions.map((a) => (
+              <li key={`${a.kind}-${a.ref_id}`}>
+                <span className={`task-badge action-kind-${a.kind}`}>
+                  {a.kind === "reply" ? "返信" : a.kind === "deal" ? "案件期限" : "会議"}
+                </span>
+                <span>{a.label}</span>
+              </li>
+            ))}
+          </ol>
+        </>
+      )}
+
       <div className="stat-grid">
         {stats.map((s) => (
           <div key={s.label} className="stat-card">
@@ -52,6 +71,62 @@ export function DashboardView() {
           </div>
         ))}
       </div>
+
+      {reminders && (
+        <div className="reminder-columns">
+          <div>
+            <h3>返信忘れ ({reminders.overdue_replies.length})</h3>
+            {reminders.overdue_replies.length === 0 ? (
+              <p className="ai-empty">返信忘れはありません。</p>
+            ) : (
+              <ul className="reminder-list">
+                {reminders.overdue_replies.map((r) => (
+                  <li key={r.message_id}>
+                    <strong>{r.subject || "(件名なし)"}</strong>
+                    <span className="related-list-meta">
+                      {r.sender_address} / {Math.round(r.hours_overdue)}時間 超過
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div>
+            <h3>期限切れ案件 ({reminders.expiring_deals.length})</h3>
+            {reminders.expiring_deals.length === 0 ? (
+              <p className="ai-empty">期限切れの案件はありません。</p>
+            ) : (
+              <ul className="reminder-list">
+                {reminders.expiring_deals.map((d) => (
+                  <li key={d.id}>
+                    <strong>{d.title}</strong>
+                    <span className="related-list-meta">返信期限 {d.reply_deadline}（{d.days_overdue}日超過）</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div>
+            <h3>今後7日の会議 ({reminders.upcoming_meetings.length})</h3>
+            {reminders.upcoming_meetings.length === 0 ? (
+              <p className="ai-empty">予定されている会議はありません。</p>
+            ) : (
+              <ul className="reminder-list">
+                {reminders.upcoming_meetings.map((m) => (
+                  <li key={m.id}>
+                    <strong>{m.title || "(件名なし)"}</strong>
+                    <span className="related-list-meta">
+                      {m.platform.toUpperCase()} / {new Date(m.starts_at).toLocaleString("ja-JP")}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
 
       <h3>会社ランキング（案件数）</h3>
       {data.top_companies.length === 0 ? (

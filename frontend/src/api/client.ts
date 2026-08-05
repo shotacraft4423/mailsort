@@ -76,6 +76,13 @@ export interface DashboardData {
   weekly_contact_frequency: number;
 }
 
+export interface RemindersData {
+  overdue_replies: { message_id: string; subject: string; sender_address: string; received_at: string; hours_overdue: number }[];
+  upcoming_meetings: { id: string; title: string; platform: string; starts_at: string }[];
+  expiring_deals: { id: string; title: string; reply_deadline: string; days_overdue: number }[];
+  recommended_actions: { kind: string; label: string; ref_id: string; urgency_score: number }[];
+}
+
 export interface AccountSummary {
   id: string;
   display_name: string;
@@ -354,6 +361,7 @@ export const api = {
       body: JSON.stringify({ question }),
     }),
   dashboard: () => request<DashboardData>("/dashboard"),
+  reminders: () => request<RemindersData>("/dashboard/reminders"),
 
   listAccounts: () => request<AccountSummary[]>("/accounts"),
   getAccountFolders: (accountId: string) => request<string[]>(`/accounts/${accountId}/folders`),

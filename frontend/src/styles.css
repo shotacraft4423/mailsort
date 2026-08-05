@@ -373,6 +373,66 @@ body {
   padding: 4px 0;
 }
 
+/* Dashboard reminders */
+
+.recommended-actions {
+  list-style: decimal;
+  padding-left: 20px;
+  margin: 12px 0 24px;
+  max-width: 640px;
+}
+
+.recommended-actions li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.action-kind-reply {
+  background: #d13438;
+  color: white;
+  border-color: transparent;
+}
+
+.action-kind-deal {
+  background: #c19c00;
+  color: white;
+  border-color: transparent;
+}
+
+.action-kind-meeting {
+  background: var(--accent);
+  color: white;
+  border-color: transparent;
+}
+
+.reminder-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 24px;
+  margin: 16px 0 32px;
+}
+
+.reminder-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reminder-list li {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 /* Calendar / agenda view */
 
 .calendar-view h3 {

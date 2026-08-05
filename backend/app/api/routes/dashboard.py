@@ -11,7 +11,7 @@ from app.api.deps import get_db
 from app.db.models.ai import AIAnalysis
 from app.db.models.company import Company
 from app.db.models.deal import Candidate, Deal
-from app.services.insights_service import compute_insights
+from app.services.insights_service import compute_insights, compute_reminders
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -71,4 +71,54 @@ def get_dashboard(db: Session = Depends(get_db)) -> DashboardOut:
         avg_reply_speed_hours=insights.avg_reply_speed_hours,
         deal_win_rate=insights.deal_win_rate,
         weekly_contact_frequency=insights.weekly_contact_frequency,
+    )
+
+
+class OverdueReplyOut(BaseModel):
+    message_id: str
+    subject: str
+    sender_address: str
+    received_at: datetime
+    hours_overdue: float
+
+
+class UpcomingMeetingOut(BaseModel):
+    id: str
+    title: str
+    platform: str
+    starts_at: datetime
+
+
+class ExpiringDealOut(BaseModel):
+    id: str
+    title: str
+    reply_deadline: str
+    days_overdue: int
+
+
+class RecommendedActionOut(BaseModel):
+    kind: str
+    label: str
+    ref_id: str
+    urgency_score: float
+
+
+class RemindersOut(BaseModel):
+    overdue_replies: list[OverdueReplyOut]
+    upcoming_meetings: list[UpcomingMeetingOut]
+    expiring_deals: list[ExpiringDealOut]
+    recommended_actions: list[RecommendedActionOut]
+
+
+@router.get("/reminders", response_model=RemindersOut)
+def get_reminders(db: Session = Depends(get_db)) -> RemindersOut:
+    """返信忘れ・会議予定・期限切れ案件 + AIおすすめ対応順 — separate from the
+    main dashboard payload so it can be polled/refreshed independently and
+    stays easy to test in isolation."""
+    reminders = compute_reminders(db)
+    return RemindersOut(
+        overdue_replies=[OverdueReplyOut(**vars(r)) for r in reminders.overdue_replies],
+        upcoming_meetings=[UpcomingMeetingOut(**vars(m)) for m in reminders.upcoming_meetings],
+        expiring_deals=[ExpiringDealOut(**vars(d)) for d in reminders.expiring_deals],
+        recommended_actions=[RecommendedActionOut(**vars(a)) for a in reminders.recommended_actions],
     )
