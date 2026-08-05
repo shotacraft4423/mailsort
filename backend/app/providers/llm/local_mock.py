@@ -32,13 +32,38 @@ class LocalMockProvider(LLMProvider):
     name = "local_mock"
 
     async def complete_json(self, *, system_prompt: str, user_prompt: str) -> tuple[dict, LLMResponse]:
-        text = user_prompt
+        # This provider is the default for *every* JSON-producing task (not
+        # just classification) — duplicate_detection_service and
+        # matching_service also call get_llm_provider() and land here when
+        # no real API key is configured. Returning the classification shape
+        # unconditionally used to leak classification-flavored "rationale"
+        # text into duplicate/match results; dispatch on which system
+        # prompt is asking so each task gets a shape its caller actually
+        # expects (see each service's DEFAULT_SYSTEM_PROMPT for the marker
+        # strings matched below).
+        if "重複か判定" in system_prompt:
+            result = self._duplicate_stub()
+        elif "マッチングアドバイザー" in system_prompt:
+            result = self._matching_stub()
+        elif "構造化データを抽出" in system_prompt:
+            result = {}  # no offline heuristic for extraction; an empty result is a safe, honest default
+        else:
+            result = self._classification_stub(user_prompt)
+        return result, LLMResponse(text=str(result), model=self.name)
+
+    async def complete_text(self, *, system_prompt: str, user_prompt: str) -> LLMResponse:
+        return LLMResponse(
+            text="[オフラインモード] AIプロバイダーが設定されていないため、テンプレート応答のみ生成できます。",
+            model=self.name,
+        )
+
+    def _classification_stub(self, text: str) -> dict:
         matched = [label for label, keywords in _KEYWORD_RULES if any(k in text for k in keywords)]
         if not matched:
             matched = ["その他"]
-
         reply_required = any(hint in text for hint in _REPLY_HINTS)
-        result = {
+
+        return {
             "mail_type": matched[0],
             "categories": [{"label": label, "confidence": 0.55} for label in matched],
             "priority": "high" if reply_required else "normal",
@@ -58,10 +83,14 @@ class LocalMockProvider(LLMProvider):
                 " 実際のAIプロバイダーが利用可能になると、より精緻な分類に置き換わります。"
             ),
         }
-        return result, LLMResponse(text=str(result), model=self.name)
 
-    async def complete_text(self, *, system_prompt: str, user_prompt: str) -> LLMResponse:
-        return LLMResponse(
-            text="[オフラインモード] AIプロバイダーが設定されていないため、テンプレート応答のみ生成できます。",
-            model=self.name,
-        )
+    def _duplicate_stub(self) -> dict:
+        return {
+            "relation": "candidate",
+            "reason": "オフラインモードのため埋め込み類似度のみに基づく重複候補として扱っています。",
+        }
+
+    def _matching_stub(self) -> dict:
+        # No "score" key: callers (matching_service._score_with_llm) fall
+        # back to the raw embedding similarity when it's absent.
+        return {"rationale": "オフラインモードのため埋め込み類似度のみに基づく推定スコアです。"}

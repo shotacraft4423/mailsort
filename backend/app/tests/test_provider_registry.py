@@ -40,3 +40,30 @@ async def test_local_mock_never_raises_and_returns_dict():
     assert result["mail_type"] == "案件紹介"
     assert result["reply_required"] is True
     assert response.model == "local_mock"
+
+
+@pytest.mark.asyncio
+async def test_local_mock_dispatches_by_task_instead_of_always_classifying():
+    """Regression test: LocalMockProvider is the default provider for every
+    JSON task, not just classification. It must not leak classification
+    fields (mail_type/categories/...) into duplicate-check or matching-score
+    callers just because they also call complete_json()."""
+    provider = LocalMockProvider()
+
+    duplicate_result, _ = await provider.complete_json(
+        system_prompt="2件の案件情報が同一案件の重複か判定してください。", user_prompt="A: x\nB: y"
+    )
+    assert set(duplicate_result) == {"relation", "reason"}
+    assert duplicate_result["relation"] == "candidate"
+
+    matching_result, _ = await provider.complete_json(
+        system_prompt="あなたはSES営業のマッチングアドバイザーです。", user_prompt="案件と人材の情報"
+    )
+    assert "mail_type" not in matching_result
+    assert "score" not in matching_result  # caller falls back to embedding similarity when absent
+    assert "rationale" in matching_result
+
+    extraction_result, _ = await provider.complete_json(
+        system_prompt="あなたはSES営業メールから構造化データを抽出するアシスタントです。", user_prompt="件名: x\n本文: y"
+    )
+    assert extraction_result == {}

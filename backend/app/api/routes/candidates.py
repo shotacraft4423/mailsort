@@ -7,8 +7,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
-from app.db.models.deal import Candidate
+from app.db.models.deal import Candidate, Deal, MatchScore
 from app.services.duplicate_detection_service import find_duplicate_candidates
+from app.services.matching_service import find_matches_for_candidate
 
 router = APIRouter(prefix="/candidates", tags=["candidates"])
 
@@ -75,4 +76,36 @@ async def find_duplicates(candidate_id: str, db: Session = Depends(get_db)) -> l
     return [
         {"other_id": m.other_id, "similarity": m.similarity, "relation": m.relation, "reason": m.reason}
         for m in matches
+    ]
+
+
+@router.post("/{candidate_id}/find-matches")
+async def find_matches(candidate_id: str, top_n: int = 5, db: Session = Depends(get_db)) -> list[dict]:
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).one_or_none()
+    if candidate is None:
+        raise HTTPException(status_code=404, detail="candidate not found")
+    results = await find_matches_for_candidate(db, candidate, top_n=top_n)
+    return [
+        {
+            "deal_id": r.match.deal_id,
+            "score": r.match.score,
+            "similarity": r.similarity,
+            "rationale": r.match.rationale,
+        }
+        for r in results
+    ]
+
+
+@router.get("/{candidate_id}/matches")
+def get_matches(candidate_id: str, db: Session = Depends(get_db)) -> list[dict]:
+    rows = db.query(MatchScore).filter(MatchScore.candidate_id == candidate_id).order_by(MatchScore.score.desc()).all()
+    deals = {d.id: d for d in db.query(Deal).filter(Deal.id.in_([r.deal_id for r in rows])).all()}
+    return [
+        {
+            "deal_id": r.deal_id,
+            "deal_title": deals[r.deal_id].title if r.deal_id in deals else "(削除済み)",
+            "score": r.score,
+            "rationale": r.rationale,
+        }
+        for r in rows
     ]

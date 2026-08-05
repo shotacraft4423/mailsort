@@ -167,6 +167,7 @@ function DealTab({ related }: { related: RelatedData | null }) {
           <div className="related-list-meta">
             {d.location ?? "勤務地未設定"} / {d.unit_price_min ?? "?"}〜{d.unit_price_max ?? "?"}万円 / {d.status}
           </div>
+          <MatchFinder kind="deal" id={d.id} />
         </li>
       ))}
     </ul>
@@ -186,9 +187,50 @@ function CandidateTab({ related }: { related: RelatedData | null }) {
             {c.location_preference ?? "希望勤務地未設定"} / {c.unit_price_min ?? "?"}〜{c.unit_price_max ?? "?"}万円 /{" "}
             {c.status}
           </div>
+          <MatchFinder kind="candidate" id={c.id} />
         </li>
       ))}
     </ul>
+  );
+}
+
+function MatchFinder({ kind, id }: { kind: "deal" | "candidate"; id: string }) {
+  const [matches, setMatches] = useState<{ label: string; score: number; rationale: string }[] | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const run = async () => {
+    setLoading(true);
+    try {
+      if (kind === "deal") {
+        const results = await api.findDealMatches(id);
+        setMatches(results.map((r) => ({ label: r.candidate_name ?? r.candidate_id, score: r.score, rationale: r.rationale })));
+      } else {
+        const results = await api.findCandidateMatches(id);
+        setMatches(results.map((r) => ({ label: r.deal_title ?? r.deal_id, score: r.score, rationale: r.rationale })));
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="match-finder">
+      <button onClick={run} disabled={loading}>
+        {loading ? "検索中…" : kind === "deal" ? "候補人材を探す" : "候補案件を探す"}
+      </button>
+      {matches && (
+        <ul className="match-results">
+          {matches.length === 0 && <li className="ai-empty">候補が見つかりませんでした。</li>}
+          {matches.map((m) => (
+            <li key={m.label}>
+              <span className="match-score">{Math.round(m.score * 100)}%</span>
+              <span>{m.label}</span>
+              <div className="related-list-meta">{m.rationale}</div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

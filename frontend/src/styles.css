@@ -608,6 +608,42 @@ body {
   margin-top: 2px;
 }
 
+.match-finder {
+  margin-top: 8px;
+}
+
+.match-finder button {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--accent);
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.match-results {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.match-results li {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.match-score {
+  font-weight: 700;
+  color: var(--accent);
+  margin-right: 6px;
+}
+
 .badge-reschedule {
   background: #d13438;
   color: white;

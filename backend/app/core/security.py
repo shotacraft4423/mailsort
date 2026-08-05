@@ -1,19 +1,26 @@
 """Anonymization / masking helpers used before any content leaves the
-process toward an external LLM API, plus a tiny symmetric-encryption helper
-for at-rest secrets (account passwords, plugin tokens).
+process toward an external LLM API, plus at-rest encryption for stored
+secrets (account passwords, plugin tokens) via `cryptography`'s Fernet
+(AES-128-CBC + HMAC, authenticated encryption).
 
-This is intentionally dependency-light (stdlib regex + hashlib) so the
-scaffold runs offline without extra packages. A production build should
-swap `mask_text` for a proper NER-based redactor and `encrypt_secret` for an
-OS-keychain-backed key.
+Key management: if `MAILSORT_SECRET_KEY` is set (e.g. injected by a secret
+manager in a team/server deployment), it is used directly. Otherwise a key
+is generated on first use and persisted to `<data_dir>/secret.key` with
+owner-only permissions — appropriate for the local-first desktop use case,
+where "at rest" means "on this machine's disk" rather than a shared server.
+Production hardening (OS keychain / DPAPI / libsecret integration so the
+key itself isn't a plain file) is tracked as a Phase 3 item in DESIGN.md.
 """
 from __future__ import annotations
 
-import base64
 import hashlib
 import hmac
 import os
 import re
+import stat
+from pathlib import Path
+
+from cryptography.fernet import Fernet, InvalidToken
 
 _EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 _PHONE_RE = re.compile(r"(?:\+?\d{1,3}[-\s]?)?(?:\(?\d{2,4}\)?[-\s]?){2,4}\d{3,4}")
@@ -47,32 +54,49 @@ def content_hash(*parts: str) -> str:
     return hashlib.sha256(joined.encode("utf-8")).hexdigest()
 
 
-def _get_key() -> bytes:
-    # Placeholder key material. Production: derive from OS keychain /
-    # DPAPI (Windows) / libsecret (Linux), never a hardcoded env default.
-    secret = os.environ.get("MAILSORT_SECRET_KEY", "dev-only-insecure-key").encode("utf-8")
-    return hashlib.sha256(secret).digest()
+def _key_file_path() -> Path:
+    # Imported lazily to avoid a security.py <-> config.py import cycle at
+    # module load time (config.py has no reason to import security.py, but
+    # keeping the dependency one-directional and lazy here is cheap safety).
+    from app.core.config import get_settings
+
+    return get_settings().ensure_data_dir() / "secret.key"
+
+
+def _load_or_create_key() -> bytes:
+    env_key = os.environ.get("MAILSORT_SECRET_KEY")
+    if env_key:
+        return env_key.encode("ascii")
+
+    key_path = _key_file_path()
+    if key_path.exists():
+        return key_path.read_bytes()
+
+    key = Fernet.generate_key()
+    key_path.write_bytes(key)
+    try:
+        os.chmod(key_path, stat.S_IRUSR | stat.S_IWUSR)  # 0600; best-effort, no-op semantics differ on Windows
+    except OSError:
+        pass
+    return key
+
+
+def _get_fernet() -> Fernet:
+    # Deliberately not cached at module scope: key material can change
+    # between calls in tests (isolated data_dir per test) and the cost of
+    # re-reading a 44-byte key file is negligible next to an LLM round trip.
+    return Fernet(_load_or_create_key())
 
 
 def encrypt_secret(plaintext: str) -> str:
-    """XOR-with-keystream placeholder encryption (NOT for production use).
-
-    Kept dependency-free for the scaffold; swap for `cryptography`'s Fernet
-    before storing real account credentials.
-    """
-    key = _get_key()
-    keystream = hashlib.sha256(key).digest() * (len(plaintext.encode()) // 32 + 1)
-    data = plaintext.encode("utf-8")
-    xored = bytes(a ^ b for a, b in zip(data, keystream))
-    return base64.urlsafe_b64encode(xored).decode("ascii")
+    return _get_fernet().encrypt(plaintext.encode("utf-8")).decode("ascii")
 
 
 def decrypt_secret(token: str) -> str:
-    key = _get_key()
-    data = base64.urlsafe_b64decode(token.encode("ascii"))
-    keystream = hashlib.sha256(key).digest() * (len(data) // 32 + 1)
-    xored = bytes(a ^ b for a, b in zip(data, keystream))
-    return xored.decode("utf-8")
+    try:
+        return _get_fernet().decrypt(token.encode("ascii")).decode("utf-8")
+    except InvalidToken as exc:
+        raise ValueError("stored secret could not be decrypted with the current key") from exc
 
 
 def verify_hmac(payload: bytes, signature: str, secret: str) -> bool:

@@ -241,6 +241,22 @@ export interface Rule {
   actions: RuleAction[];
 }
 
+export interface DealMatch {
+  candidate_id: string;
+  candidate_name?: string;
+  score: number;
+  similarity?: number;
+  rationale: string;
+}
+
+export interface CandidateMatch {
+  deal_id: string;
+  deal_title?: string;
+  score: number;
+  similarity?: number;
+  rationale: string;
+}
+
 export interface PluginInfo {
   key: string;
   name: string;
@@ -313,6 +329,10 @@ export const api = {
   createRule: (input: { name: string; priority?: number; match_mode?: string; conditions: RuleCondition[]; actions: RuleAction[] }) =>
     request<Rule>("/rules", { method: "POST", body: JSON.stringify(input) }),
   toggleRule: (id: string) => request<Rule>(`/rules/${id}/toggle`, { method: "PATCH" }),
+
+  findDealMatches: (dealId: string) => request<DealMatch[]>(`/deals/${dealId}/find-matches`, { method: "POST" }),
+  findCandidateMatches: (candidateId: string) =>
+    request<CandidateMatch[]>(`/candidates/${candidateId}/find-matches`, { method: "POST" }),
 
   listPlugins: () => request<PluginInfo[]>("/plugins"),
   updatePlugin: (key: string, input: { is_enabled: boolean; config?: Record<string, string> }) =>
