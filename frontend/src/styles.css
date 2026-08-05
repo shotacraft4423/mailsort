@@ -373,6 +373,57 @@ body {
   padding: 4px 0;
 }
 
+/* Calendar / agenda view */
+
+.calendar-view h3 {
+  margin-top: 24px;
+}
+
+.agenda-day {
+  margin-bottom: 12px;
+}
+
+.agenda-day-label {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.agenda-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.agenda-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  max-width: 640px;
+}
+
+.agenda-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.agenda-title {
+  flex: 1;
+}
+
+.agenda-link {
+  color: var(--accent);
+  font-size: 12px;
+}
+
 /* Settings */
 
 .settings-section {

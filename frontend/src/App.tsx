@@ -6,10 +6,11 @@ import { ReplyComposer } from "./components/ReplyComposer";
 import { DashboardView } from "./components/DashboardView";
 import { SettingsView } from "./components/SettingsView";
 import { AdminView } from "./components/AdminView";
+import { CalendarView } from "./components/CalendarView";
 import { api } from "./api/client";
 import type { MessageDetail, MessageHit, MessageSummary } from "./api/client";
 
-type View = "mail" | "dashboard" | "admin" | "settings";
+type View = "mail" | "dashboard" | "meetings" | "admin" | "settings";
 
 export default function App() {
   const [view, setView] = useState<View>("mail");
@@ -148,6 +149,9 @@ export default function App() {
           <button className={view === "dashboard" ? "active" : ""} onClick={() => setView("dashboard")}>
             ダッシュボード
           </button>
+          <button className={view === "meetings" ? "active" : ""} onClick={() => setView("meetings")}>
+            会議
+          </button>
           <button className={view === "admin" ? "active" : ""} onClick={() => setView("admin")}>
             管理
           </button>
@@ -191,6 +195,7 @@ export default function App() {
       </header>
 
       {view === "dashboard" && <DashboardView />}
+      {view === "meetings" && <CalendarView />}
       {view === "admin" && <AdminView />}
       {view === "settings" && <SettingsView />}
 
