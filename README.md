@@ -97,6 +97,9 @@ uvicorn app.main:app --reload --port 8000
 ```
 
 - 初回起動時に SQLite DB (`mailsort.db`) が自動作成されます。
+- 「設定」タブで保存したAIプロバイダー/APIキー/表示言語は DB (`app_settings` テーブル、暗号化)に永続化され、
+  バックエンド再起動後も維持されます（環境変数のみに頼っていた旧バージョンでは、再起動のたびに
+  ローカル簡易分類にリセットされていました）。
 - デフォルトでは `MAILSORT_AI_ENABLED=true` / `MAILSORT_LLM_PROVIDER=local_mock` で起動し、
   外部APIキーなしでもキーワードベースの分類で動作します（非機能要件: AI無効でも通常のメーラーとして使用可）。
 - 名刺OCR/画像添付のOCRには `pytesseract` と Tesseract 本体（OS側インストールが必要）が必要です。
@@ -150,6 +153,9 @@ npm run build      # 型チェック + 本番ビルド
 
 Tauriデスクトップアプリとしてビルドするには Rust ツールチェーンが別途必要です
 （`frontend/src-tauri/` にTauri設定を同梱済み。`npm run tauri dev` / `npm run tauri build`）。
+
+UIの表示言語（日本語/English）は「設定」タブの「表示設定」から切り替えられます
+（`frontend/src/i18n/`、バックエンドの `ui_language` 設定として永続化）。
 
 ## API
 

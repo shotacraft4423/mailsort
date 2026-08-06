@@ -1,23 +1,27 @@
 """GUI-editable runtime settings. Values are backed by environment
-variables via pydantic-settings (see core/config.py); this route mutates
-`os.environ` and clears the settings cache so a change takes effect on the
-next request without a process restart. A commercial build should persist
-these to a DB table instead (so they survive a container/process restart
-without relying on env files) — the API shape here would stay the same.
+variables via pydantic-settings (see core/config.py) for zero-latency reads
+within a running process, and mirrored into the `app_settings` DB table
+(see services/settings_service.py) so a backend restart doesn't silently
+revert them to build defaults — the app's startup lifespan (main.py) loads
+the persisted row back into os.environ before serving any request.
 """
 from __future__ import annotations
 
 import os
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.db.session import get_db
 from app.providers.llm.registry import list_providers
+from app.services.settings_service import persist_settings
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
-_EDITABLE_FIELDS = {
+# field name -> env var name, for every value that should survive a restart.
+ALL_FIELDS = {
     "ai_enabled": "MAILSORT_AI_ENABLED",
     "llm_provider": "MAILSORT_LLM_PROVIDER",
     "embedding_provider": "MAILSORT_EMBEDDING_PROVIDER",
@@ -26,7 +30,21 @@ _EDITABLE_FIELDS = {
     "anthropic_model": "MAILSORT_ANTHROPIC_MODEL",
     "anonymize_before_send": "MAILSORT_ANONYMIZE_BEFORE_SEND",
     "duplicate_similarity_threshold": "MAILSORT_DUPLICATE_SIMILARITY_THRESHOLD",
+    "ui_language": "MAILSORT_UI_LANGUAGE",
+    "openai_compatible_api_key": "MAILSORT_OPENAI_COMPATIBLE_API_KEY",
+    "anthropic_api_key": "MAILSORT_ANTHROPIC_API_KEY",
 }
+
+
+def apply_env_patch(data: dict) -> None:
+    """Write a {field_name: value} dict into os.environ using ALL_FIELDS,
+    then drop the cached Settings instance so the next get_settings() call
+    picks the new values up."""
+    for field, value in data.items():
+        env_key = ALL_FIELDS.get(field)
+        if env_key:
+            os.environ[env_key] = str(value)
+    get_settings.cache_clear()
 
 
 class SettingsOut(BaseModel):
@@ -39,6 +57,7 @@ class SettingsOut(BaseModel):
     anthropic_model: str
     anonymize_before_send: bool
     duplicate_similarity_threshold: float
+    ui_language: str
     available_llm_providers: list[str]
     has_openai_compatible_key: bool
     has_anthropic_key: bool
@@ -53,6 +72,7 @@ class SettingsUpdate(BaseModel):
     anthropic_model: str | None = None
     anonymize_before_send: bool | None = None
     duplicate_similarity_threshold: float | None = None
+    ui_language: str | None = None
     openai_compatible_api_key: str | None = None
     anthropic_api_key: str | None = None
 
@@ -70,6 +90,7 @@ def read_settings() -> SettingsOut:
         anthropic_model=settings.anthropic_model,
         anonymize_before_send=settings.anonymize_before_send,
         duplicate_similarity_threshold=settings.duplicate_similarity_threshold,
+        ui_language=settings.ui_language,
         available_llm_providers=list_providers(),
         has_openai_compatible_key=bool(settings.openai_compatible_api_key),
         has_anthropic_key=bool(settings.anthropic_api_key),
@@ -77,15 +98,8 @@ def read_settings() -> SettingsOut:
 
 
 @router.put("", response_model=SettingsOut)
-def update_settings(payload: SettingsUpdate) -> SettingsOut:
+def update_settings(payload: SettingsUpdate, db: Session = Depends(get_db)) -> SettingsOut:
     data = payload.model_dump(exclude_none=True)
-    for field, value in data.items():
-        env_key = _EDITABLE_FIELDS.get(field) or {
-            "openai_compatible_api_key": "MAILSORT_OPENAI_COMPATIBLE_API_KEY",
-            "anthropic_api_key": "MAILSORT_ANTHROPIC_API_KEY",
-        }.get(field)
-        if env_key:
-            os.environ[env_key] = str(value)
-
-    get_settings.cache_clear()
+    apply_env_patch(data)
+    persist_settings(db, data)
     return read_settings()

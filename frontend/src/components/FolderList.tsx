@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import { useTranslation } from "../i18n/I18nContext";
 
 const DEFAULT_FOLDERS = ["INBOX", "Drafts", "Sent", "Archive", "Trash", "案件", "人材", "要返信", "重要"];
 
@@ -17,6 +18,7 @@ interface Props {
 }
 
 export function FolderList({ active, onSelect }: Props) {
+  const { t } = useTranslation();
   // null = still resolving which folder list to show. Starting from
   // DEFAULT_FOLDERS and swapping to the real list once fetched caused a
   // visible flash (wrong folders shown for a moment, then replaced) —
@@ -54,7 +56,7 @@ export function FolderList({ active, onSelect }: Props) {
   }, []);
 
   if (folders === null) {
-    return <nav className="folder-list" aria-label="フォルダ" />;
+    return <nav className="folder-list" aria-label={t("folder.aria")} />;
   }
 
   return (

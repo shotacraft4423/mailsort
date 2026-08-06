@@ -1,4 +1,5 @@
 import type { MessageSummary } from "../api/client";
+import { useTranslation } from "../i18n/I18nContext";
 
 interface Props {
   messages: MessageSummary[];
@@ -7,12 +8,14 @@ interface Props {
 }
 
 export function MessageList({ messages, selectedId, onSelect }: Props) {
+  const { t } = useTranslation();
+
   if (messages.length === 0) {
-    return <div className="message-list-empty">メールがありません</div>;
+    return <div className="message-list-empty">{t("messageList.empty")}</div>;
   }
 
   return (
-    <ul className="message-list" aria-label="メール一覧">
+    <ul className="message-list" aria-label={t("messageList.aria")}>
       {messages.map((message) => (
         <li
           key={message.id}
@@ -26,8 +29,8 @@ export function MessageList({ messages, selectedId, onSelect }: Props) {
             )}
           </div>
           <div className="subject">
-            {message.is_flagged && <span aria-label="フラグ付き">★ </span>}
-            {message.subject || "(件名なし)"}
+            {message.is_flagged && <span aria-label={t("messageList.flaggedAria")}>★ </span>}
+            {message.subject || t("common.noSubject")}
           </div>
         </li>
       ))}

@@ -1,24 +1,26 @@
 import { useEffect, useState } from "react";
 import type { PluginInfo, PromptTemplate, Rule, RuleAction, RuleCondition } from "../api/client";
 import { api } from "../api/client";
+import { useTranslation } from "../i18n/I18nContext";
 
 type AdminTab = "prompts" | "rules" | "plugins";
 
 export function AdminView() {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<AdminTab>("prompts");
 
   return (
     <div className="view-container admin-view">
-      <h2>管理</h2>
+      <h2>{t("nav.admin")}</h2>
       <div className="admin-tabs">
         <button className={tab === "prompts" ? "active" : ""} onClick={() => setTab("prompts")}>
-          プロンプト
+          {t("admin.tabPrompts")}
         </button>
         <button className={tab === "rules" ? "active" : ""} onClick={() => setTab("rules")}>
-          ルール
+          {t("admin.tabRules")}
         </button>
         <button className={tab === "plugins" ? "active" : ""} onClick={() => setTab("plugins")}>
-          プラグイン
+          {t("admin.tabPlugins")}
         </button>
       </div>
 
@@ -29,9 +31,13 @@ export function AdminView() {
   );
 }
 
+// Underlying values sent to the backend never change with display
+// language — only the label shown in the dropdown does (see
+// translations.ts "task.*" / "ruleField.*" / "ruleOperator.*" / "actionType.*").
 const TASKS = ["classification", "extraction", "summary", "reply_suggestion", "duplicate_check", "chat"];
 
 function PromptsPanel() {
+  const { t } = useTranslation();
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [form, setForm] = useState({ name: "", task: TASKS[0], system_prompt: "", user_prompt_template: "" });
   const [saving, setSaving] = useState(false);
@@ -79,25 +85,22 @@ function PromptsPanel() {
 
   return (
     <section className="admin-panel">
-      <p className="ai-empty">
-        分類・抽出タスクは、ここでtask="classification"/"extraction"のテンプレートを有効化すると、
-        バックエンドのデフォルトプロンプトの代わりに使用されます。
-      </p>
+      <p className="ai-empty">{t("admin.promptsHelp")}</p>
 
       <ul className="prompt-list">
-        {templates.map((t) => (
-          <li key={t.id} className="prompt-card">
+        {templates.map((tpl) => (
+          <li key={tpl.id} className="prompt-card">
             <div className="prompt-card-header">
-              <strong>{t.name}</strong>
-              <span className="task-badge">{t.task}</span>
-              <button onClick={() => (expanded === t.id ? setExpanded(null) : startEditVersion(t))}>
-                {expanded === t.id ? "閉じる" : "新バージョン追加"}
+              <strong>{tpl.name}</strong>
+              <span className="task-badge">{t(`task.${tpl.task}`)}</span>
+              <button onClick={() => (expanded === tpl.id ? setExpanded(null) : startEditVersion(tpl))}>
+                {expanded === tpl.id ? t("common.close") : t("admin.addVersion")}
               </button>
             </div>
-            {expanded === t.id && (
+            {expanded === tpl.id && (
               <div className="prompt-version-form">
                 <label>
-                  システムプロンプト
+                  {t("admin.systemPromptLabel")}
                   <textarea
                     rows={4}
                     value={versionDraft.system_prompt}
@@ -105,7 +108,7 @@ function PromptsPanel() {
                   />
                 </label>
                 <label>
-                  ユーザープロンプトテンプレート（{"{{ subject }} {{ body }}"} 等の変数が使えます）
+                  {t("admin.userPromptTemplateLabel")}
                   <textarea
                     rows={4}
                     value={versionDraft.user_prompt_template}
@@ -113,43 +116,46 @@ function PromptsPanel() {
                   />
                 </label>
                 <label>
-                  変更メモ
+                  {t("admin.notesLabel")}
                   <input value={versionDraft.notes} onChange={(e) => setVersionDraft({ ...versionDraft, notes: e.target.value })} />
                 </label>
-                <button className="primary" onClick={() => addVersion(t.id)} disabled={saving}>
-                  保存して有効化
+                <button className="primary" onClick={() => addVersion(tpl.id)} disabled={saving}>
+                  {t("admin.saveAndActivate")}
                 </button>
               </div>
             )}
           </li>
         ))}
-        {templates.length === 0 && <li className="ai-empty">プロンプトテンプレートはまだありません。</li>}
+        {templates.length === 0 && <li className="ai-empty">{t("admin.noPrompts")}</li>}
       </ul>
 
       <div className="prompt-create-form">
-        <h4>新規テンプレート作成</h4>
-        <input placeholder="名前" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-        <select value={form.task} onChange={(e) => setForm({ ...form, task: e.target.value })}>
-          {TASKS.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
+        <h4>{t("admin.newTemplateHeading")}</h4>
+        <input placeholder={t("admin.namePlaceholder")} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        <label className="rule-inline-fields">
+          {t("admin.taskLabel")}
+          <select value={form.task} onChange={(e) => setForm({ ...form, task: e.target.value })}>
+            {TASKS.map((taskKey) => (
+              <option key={taskKey} value={taskKey}>
+                {t(`task.${taskKey}`)}
+              </option>
+            ))}
+          </select>
+        </label>
         <textarea
           rows={3}
-          placeholder="システムプロンプト"
+          placeholder={t("admin.systemPromptLabel")}
           value={form.system_prompt}
           onChange={(e) => setForm({ ...form, system_prompt: e.target.value })}
         />
         <textarea
           rows={3}
-          placeholder="ユーザープロンプトテンプレート"
+          placeholder={t("admin.userPromptTemplateLabel")}
           value={form.user_prompt_template}
           onChange={(e) => setForm({ ...form, user_prompt_template: e.target.value })}
         />
         <button onClick={createTemplate} disabled={saving}>
-          作成
+          {t("common.create")}
         </button>
       </div>
     </section>
@@ -158,8 +164,10 @@ function PromptsPanel() {
 
 const RULE_FIELDS = ["subject", "sender_address", "sender_name", "body_text", "mail_type", "priority"];
 const RULE_OPERATORS = ["equals", "contains", "starts_with", "in"];
+const ACTION_TYPES = ["tag", "notify_slack"];
 
 function RulesPanel() {
+  const { t } = useTranslation();
   const [rules, setRules] = useState<Rule[]>([]);
   const [name, setName] = useState("");
   const [priority, setPriority] = useState(100);
@@ -197,41 +205,45 @@ function RulesPanel() {
     await load();
   };
 
+  const actionLabel = (type: string) => (type === "tag" || type === "notify_slack" ? t(`actionType.${type}`) : type);
+  const fieldLabel = (field: string) => (RULE_FIELDS.includes(field) ? t(`ruleField.${field}`) : field);
+  const operatorLabel = (op: string) => (RULE_OPERATORS.includes(op) ? t(`ruleOperator.${op}`) : op);
+
   return (
     <section className="admin-panel">
-      <p className="ai-empty">「特定企業は必ず重要」「特定キーワードはSlack通知」のようなノーコード条件分岐を設定できます。</p>
+      <p className="ai-empty">{t("admin.rulesHelp")}</p>
 
       <ul className="rule-list">
         {rules.map((r) => (
           <li key={r.id} className={`rule-card ${r.is_active ? "" : "inactive"}`}>
             <div className="rule-card-header">
               <strong>{r.name}</strong>
-              <span>優先度 {r.priority}</span>
-              <button onClick={() => toggle(r.id)}>{r.is_active ? "無効化" : "有効化"}</button>
+              <span>{t("admin.priorityLabel", { priority: r.priority })}</span>
+              <button onClick={() => toggle(r.id)}>{r.is_active ? t("admin.disable") : t("admin.enable")}</button>
             </div>
             <div className="rule-summary">
-              条件({r.match_mode === "all" ? "すべて一致" : "いずれか一致"}):{" "}
-              {r.conditions.map((c) => `${c.field} ${c.operator} "${c.value}"`).join(" / ")}
+              {r.match_mode === "all" ? t("admin.conditionsSummaryAll") : t("admin.conditionsSummaryAny")}{" "}
+              {r.conditions.map((c) => `${fieldLabel(c.field)} ${operatorLabel(c.operator)} "${c.value}"`).join(" / ")}
             </div>
-            <div className="rule-summary">アクション: {r.actions.map((a) => a.type).join(", ")}</div>
+            <div className="rule-summary">{t("admin.actionsSummary", { actions: r.actions.map((a) => actionLabel(a.type)).join(", ") })}</div>
           </li>
         ))}
-        {rules.length === 0 && <li className="ai-empty">ルールはまだありません。</li>}
+        {rules.length === 0 && <li className="ai-empty">{t("admin.noRules")}</li>}
       </ul>
 
       <div className="rule-create-form">
-        <h4>新規ルール作成</h4>
-        <input placeholder="ルール名" value={name} onChange={(e) => setName(e.target.value)} />
+        <h4>{t("admin.newRuleHeading")}</h4>
+        <input placeholder={t("admin.ruleNamePlaceholder")} value={name} onChange={(e) => setName(e.target.value)} />
         <div className="rule-inline-fields">
           <label>
-            優先度
+            {t("admin.priorityFieldLabel")}
             <input type="number" value={priority} onChange={(e) => setPriority(Number(e.target.value))} />
           </label>
           <label>
-            条件の一致方法
+            {t("admin.matchModeLabel")}
             <select value={matchMode} onChange={(e) => setMatchMode(e.target.value as "all" | "any")}>
-              <option value="all">すべて一致</option>
-              <option value="any">いずれか一致</option>
+              <option value="all">{t("admin.matchModeAll")}</option>
+              <option value="any">{t("admin.matchModeAny")}</option>
             </select>
           </label>
         </div>
@@ -241,32 +253,38 @@ function RulesPanel() {
             <select value={c.field} onChange={(e) => updateCondition(i, { field: e.target.value })}>
               {RULE_FIELDS.map((f) => (
                 <option key={f} value={f}>
-                  {f}
+                  {t(`ruleField.${f}`)}
                 </option>
               ))}
             </select>
             <select value={c.operator} onChange={(e) => updateCondition(i, { operator: e.target.value })}>
               {RULE_OPERATORS.map((op) => (
                 <option key={op} value={op}>
-                  {op}
+                  {t(`ruleOperator.${op}`)}
                 </option>
               ))}
             </select>
-            <input placeholder="値" value={c.value} onChange={(e) => updateCondition(i, { value: e.target.value })} />
-            <button onClick={() => removeCondition(i)}>削除</button>
+            <input placeholder={t("admin.valuePlaceholder")} value={c.value} onChange={(e) => updateCondition(i, { value: e.target.value })} />
+            <button onClick={() => removeCondition(i)}>{t("common.delete")}</button>
           </div>
         ))}
-        <button onClick={addConditionRow}>条件を追加</button>
+        <button onClick={addConditionRow}>{t("admin.addCondition")}</button>
 
         <label className="rule-action-field">
-          アクション種別（tag / notify_slack 等）
-          <input
-            value={actions[0]?.type ?? ""}
+          {t("admin.actionTypeLabel")}
+          <select
+            value={actions[0]?.type ?? "tag"}
             onChange={(e) => setActions([{ ...actions[0], type: e.target.value }])}
-          />
+          >
+            {ACTION_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {t(`actionType.${type}`)}
+              </option>
+            ))}
+          </select>
         </label>
         <label className="rule-action-field">
-          タグ名（アクションtype=tagの場合）
+          {t("admin.tagNameLabel")}
           <input
             value={actions[0]?.params?.tag ?? ""}
             onChange={(e) => setActions([{ ...actions[0], params: { ...actions[0]?.params, tag: e.target.value } }])}
@@ -274,7 +292,7 @@ function RulesPanel() {
         </label>
 
         <button className="primary" onClick={createRule} disabled={saving}>
-          ルール作成
+          {t("admin.createRule")}
         </button>
       </div>
     </section>
@@ -282,6 +300,7 @@ function RulesPanel() {
 }
 
 function PluginsPanel() {
+  const { t } = useTranslation();
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
   const [webhookUrls, setWebhookUrls] = useState<Record<string, string>>({});
 
@@ -301,22 +320,23 @@ function PluginsPanel() {
 
   return (
     <section className="admin-panel">
+      <p className="ai-empty">{t("admin.pluginsHelp")}</p>
       <ul className="plugin-list">
         {plugins.map((p) => (
           <li key={p.key} className="plugin-card">
             <div className="plugin-card-header">
               <strong>{p.name}</strong>
               <span className="task-badge">v{p.version}</span>
-              <button onClick={() => toggle(p)}>{p.is_enabled ? "無効化" : "有効化"}</button>
+              <button onClick={() => toggle(p)}>{p.is_enabled ? t("admin.disable") : t("admin.enable")}</button>
             </div>
             <input
-              placeholder="Slack Webhook URL（サンプルプラグイン用）"
+              placeholder={t("admin.webhookPlaceholder")}
               value={webhookUrls[p.key] ?? ""}
               onChange={(e) => setWebhookUrls({ ...webhookUrls, [p.key]: e.target.value })}
             />
           </li>
         ))}
-        {plugins.length === 0 && <li className="ai-empty">プラグインが見つかりません（plugins/ ディレクトリを確認してください）。</li>}
+        {plugins.length === 0 && <li className="ai-empty">{t("admin.noPlugins")}</li>}
       </ul>
     </section>
   );

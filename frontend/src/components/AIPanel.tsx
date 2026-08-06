@@ -1,16 +1,17 @@
 import { useEffect, useState } from "react";
 import type { AuditLogEntry, DealNetwork, MessageDetail, RelatedData } from "../api/client";
 import { api } from "../api/client";
+import { useTranslation } from "../i18n/I18nContext";
 
 type Tab = "summary" | "chat" | "company" | "deal" | "candidate" | "meeting";
 
-const TABS: { key: Tab; label: string }[] = [
-  { key: "summary", label: "要約" },
-  { key: "chat", label: "チャット" },
-  { key: "company", label: "会社情報" },
-  { key: "deal", label: "案件情報" },
-  { key: "candidate", label: "人材情報" },
-  { key: "meeting", label: "会議" },
+const TAB_KEYS: { key: Tab; labelKey: string }[] = [
+  { key: "summary", labelKey: "ai.tabSummary" },
+  { key: "chat", labelKey: "ai.tabChat" },
+  { key: "company", labelKey: "ai.tabCompany" },
+  { key: "deal", labelKey: "ai.tabDeal" },
+  { key: "candidate", labelKey: "ai.tabCandidate" },
+  { key: "meeting", labelKey: "ai.tabMeeting" },
 ];
 
 interface Props {
@@ -18,6 +19,7 @@ interface Props {
 }
 
 export function AIPanel({ message }: Props) {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>("summary");
   const [related, setRelated] = useState<RelatedData | null>(null);
 
@@ -33,22 +35,22 @@ export function AIPanel({ message }: Props) {
   }, [message?.id]);
 
   return (
-    <aside className="ai-panel" aria-label="AIパネル">
+    <aside className="ai-panel" aria-label={t("ai.panelAria")}>
       <div className="ai-tabs" role="tablist">
-        {TABS.map((t) => (
+        {TAB_KEYS.map((tb) => (
           <button
-            key={t.key}
+            key={tb.key}
             role="tab"
-            aria-selected={tab === t.key}
-            className={`ai-tab ${tab === t.key ? "active" : ""}`}
-            onClick={() => setTab(t.key)}
+            aria-selected={tab === tb.key}
+            className={`ai-tab ${tab === tb.key ? "active" : ""}`}
+            onClick={() => setTab(tb.key)}
           >
-            {t.label}
+            {t(tb.labelKey)}
           </button>
         ))}
       </div>
       <div className="ai-tab-content">
-        {!message && <p className="ai-empty">メールを選択してください</p>}
+        {!message && <p className="ai-empty">{t("ai.selectMessage")}</p>}
         {message && tab === "summary" && <SummaryTab message={message} />}
         {message && tab === "chat" && <ChatTab />}
         {message && tab === "company" && <CompanyTab related={related} />}
@@ -61,6 +63,7 @@ export function AIPanel({ message }: Props) {
 }
 
 function SummaryTab({ message }: { message: MessageDetail }) {
+  const { t } = useTranslation();
   const [level, setLevel] = useState<"3line" | "10line" | "detailed">("3line");
   const [summary, setSummary] = useState(message.summary_3line ?? "");
   const [loading, setLoading] = useState(false);
@@ -87,11 +90,11 @@ function SummaryTab({ message }: { message: MessageDetail }) {
       <div className="summary-level-switch">
         {(["3line", "10line", "detailed"] as const).map((l) => (
           <button key={l} className={l === level ? "active" : ""} onClick={() => runSummarize(l)}>
-            {l === "3line" ? "3行" : l === "10line" ? "10行" : "詳細"}
+            {l === "3line" ? t("ai.level3") : l === "10line" ? t("ai.level10") : t("ai.levelDetailed")}
           </button>
         ))}
       </div>
-      <p className="summary-text">{loading ? "生成中…" : summary || "まだ要約が生成されていません"}</p>
+      <p className="summary-text">{loading ? t("common.generating") : summary || t("ai.noSummaryYet")}</p>
 
       {displayCategories.length > 0 && (
         <div className="category-tags">
@@ -129,6 +132,7 @@ const CATEGORY_OPTIONS = [
 ];
 
 function CategoryCorrection({ messageId, onCorrected }: { messageId: string; onCorrected: (label: string) => void }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [selected, setSelected] = useState(CATEGORY_OPTIONS[0]);
   const [custom, setCustom] = useState("");
@@ -153,7 +157,7 @@ function CategoryCorrection({ messageId, onCorrected }: { messageId: string; onC
     <div className="category-correction">
       {!expanded && (
         <button className="audit-log-toggle" onClick={() => setExpanded(true)}>
-          この分類は違います
+          {t("ai.categoryWrong")}
         </button>
       )}
       {expanded && (
@@ -165,19 +169,20 @@ function CategoryCorrection({ messageId, onCorrected }: { messageId: string; onC
               </option>
             ))}
           </select>
-          <input placeholder="または自由入力" value={custom} onChange={(e) => setCustom(e.target.value)} />
+          <input placeholder={t("ai.orCustomInput")} value={custom} onChange={(e) => setCustom(e.target.value)} />
           <button onClick={submit} disabled={saving}>
-            {saving ? "保存中…" : "この分類に修正する"}
+            {saving ? t("common.saving") : t("ai.confirmCorrection")}
           </button>
-          <button onClick={() => setExpanded(false)}>キャンセル</button>
+          <button onClick={() => setExpanded(false)}>{t("common.cancel")}</button>
         </div>
       )}
-      {confirmed && <p className="reply-status">「{confirmed}」に修正しました。今後の類似メール分類に反映されます。</p>}
+      {confirmed && <p className="reply-status">{t("ai.correctionSaved", { label: confirmed })}</p>}
     </div>
   );
 }
 
 function AuditLogSection({ messageId }: { messageId: string }) {
+  const { t } = useTranslation();
   const [entries, setEntries] = useState<AuditLogEntry[] | null>(null);
   const [expanded, setExpanded] = useState(false);
 
@@ -196,12 +201,12 @@ function AuditLogSection({ messageId }: { messageId: string }) {
   return (
     <div className="audit-log-section">
       <button className="audit-log-toggle" onClick={() => (expanded ? setExpanded(false) : load())}>
-        {expanded ? "AI判断根拠を隠す" : "AI判断根拠を表示"}
+        {expanded ? t("ai.hideRationale") : t("ai.showRationale")}
       </button>
       {expanded && (
         <ul className="audit-log-list">
-          {entries === null && <li className="ai-empty">読み込み中…</li>}
-          {entries?.length === 0 && <li className="ai-empty">このメールに対するAI判断ログはまだありません。</li>}
+          {entries === null && <li className="ai-empty">{t("common.loading")}</li>}
+          {entries?.length === 0 && <li className="ai-empty">{t("ai.noAuditLog")}</li>}
           {entries?.map((e) => (
             <li key={e.id}>
               <div className="audit-log-header">
@@ -211,8 +216,8 @@ function AuditLogSection({ messageId }: { messageId: string }) {
               </div>
               <p className="audit-log-rationale">{e.rationale}</p>
               <p className="related-list-meta">
-                送信データ: {e.data_sent_summary}
-                {e.anonymized ? "" : "（匿名化なし）"}
+                {t("ai.dataSentLabel", { summary: e.data_sent_summary })}
+                {e.anonymized ? "" : t("ai.notAnonymized")}
               </p>
             </li>
           ))}
@@ -223,6 +228,7 @@ function AuditLogSection({ messageId }: { messageId: string }) {
 }
 
 function ChatTab() {
+  const { t } = useTranslation();
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -243,11 +249,11 @@ function ChatTab() {
       <textarea
         value={question}
         onChange={(e) => setQuestion(e.target.value)}
-        placeholder="例: 今返信待ちの案件は?"
+        placeholder={t("ai.chatPlaceholder")}
         rows={3}
       />
       <button onClick={ask} disabled={loading}>
-        {loading ? "問い合わせ中…" : "質問する"}
+        {loading ? t("ai.asking") : t("ai.askButton")}
       </button>
       {answer && <p className="chat-answer">{answer}</p>}
     </div>
@@ -255,29 +261,31 @@ function ChatTab() {
 }
 
 function CompanyTab({ related }: { related: RelatedData | null }) {
-  if (!related) return <p className="ai-empty">読み込み中…</p>;
+  const { t } = useTranslation();
+  if (!related) return <p className="ai-empty">{t("common.loading")}</p>;
   const company = related.company;
-  if (!company) return <p className="ai-empty">送信元ドメインに一致する会社情報がまだありません。</p>;
+  if (!company) return <p className="ai-empty">{t("ai.noCompanyInfo")}</p>;
 
   return (
     <dl className="related-info">
-      <dt>会社名</dt>
+      <dt>{t("ai.companyName")}</dt>
       <dd>{company.name}</dd>
-      <dt>評価</dt>
-      <dd>{company.evaluation ?? "未評価"}</dd>
-      <dt>案件数</dt>
+      <dt>{t("ai.evaluation")}</dt>
+      <dd>{company.evaluation ?? t("ai.unevaluated")}</dd>
+      <dt>{t("ai.dealCount")}</dt>
       <dd>{company.deal_count}</dd>
-      <dt>人材数</dt>
+      <dt>{t("ai.candidateCount")}</dt>
       <dd>{company.candidate_count}</dd>
-      <dt>最終連絡日</dt>
+      <dt>{t("ai.lastContact")}</dt>
       <dd>{company.last_contact_at ? new Date(company.last_contact_at).toLocaleDateString("ja-JP") : "-"}</dd>
     </dl>
   );
 }
 
 function DealTab({ related }: { related: RelatedData | null }) {
-  if (!related) return <p className="ai-empty">読み込み中…</p>;
-  if (related.deals.length === 0) return <p className="ai-empty">このメールから抽出された案件はまだありません。</p>;
+  const { t } = useTranslation();
+  if (!related) return <p className="ai-empty">{t("common.loading")}</p>;
+  if (related.deals.length === 0) return <p className="ai-empty">{t("ai.noDealsExtracted")}</p>;
 
   return (
     <ul className="related-list">
@@ -285,7 +293,7 @@ function DealTab({ related }: { related: RelatedData | null }) {
         <li key={d.id}>
           <strong>{d.title}</strong>
           <div className="related-list-meta">
-            {d.location ?? "勤務地未設定"} / {d.unit_price_min ?? "?"}〜{d.unit_price_max ?? "?"}万円 / {d.status}
+            {d.location ?? t("ai.locationUnset")} / {d.unit_price_min ?? "?"}〜{d.unit_price_max ?? "?"}万円 / {d.status}
           </div>
           <MatchFinder kind="deal" id={d.id} />
           <DuplicateNetwork dealId={d.id} />
@@ -296,6 +304,7 @@ function DealTab({ related }: { related: RelatedData | null }) {
 }
 
 function DuplicateNetwork({ dealId }: { dealId: string }) {
+  const { t } = useTranslation();
   const [network, setNetwork] = useState<DealNetwork | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -313,17 +322,16 @@ function DuplicateNetwork({ dealId }: { dealId: string }) {
   return (
     <div className="match-finder">
       <button onClick={load} disabled={loading}>
-        {loading ? "検索中…" : "重複案件ネットワークを確認"}
+        {loading ? t("common.searching") : t("ai.checkDuplicateNetwork")}
       </button>
-      {network && network.nodes.length <= 1 && (
-        <p className="ai-empty">同一案件と思われる他社案件は見つかりませんでした。</p>
-      )}
+      {network && network.nodes.length <= 1 && <p className="ai-empty">{t("ai.noDuplicatesFound")}</p>}
       {network && network.nodes.length > 1 && <DuplicateNetworkDiagram network={network} />}
     </div>
   );
 }
 
 function DuplicateNetworkDiagram({ network }: { network: DealNetwork }) {
+  const { t } = useTranslation();
   const size = 260;
   const center = size / 2;
   const radius = 92;
@@ -336,7 +344,7 @@ function DuplicateNetworkDiagram({ network }: { network: DealNetwork }) {
   });
 
   const priceLabel = (n: DealNetwork["nodes"][number]) =>
-    n.unit_price_min || n.unit_price_max ? `${n.unit_price_min ?? "?"}〜${n.unit_price_max ?? "?"}万円` : "単価不明";
+    n.unit_price_min || n.unit_price_max ? `${n.unit_price_min ?? "?"}〜${n.unit_price_max ?? "?"}万円` : t("ai.priceUnknown");
 
   // Company names don't fit inside a ~35px circle, so nodes carry a short
   // index (0 = root) and the legend list below maps index -> full name.
@@ -344,8 +352,8 @@ function DuplicateNetworkDiagram({ network }: { network: DealNetwork }) {
 
   return (
     <div className="duplicate-network">
-      <p className="related-list-meta">{network.company_count}社が同一案件と思われる情報を配信しています。</p>
-      <svg viewBox={`0 0 ${size} ${size}`} role="img" aria-label="重複案件ネットワーク図" className="duplicate-network-svg">
+      <p className="related-list-meta">{t("ai.duplicateCompanyCount", { count: network.company_count })}</p>
+      <svg viewBox={`0 0 ${size} ${size}`} role="img" aria-label={t("ai.checkDuplicateNetwork")} className="duplicate-network-svg">
         {positions.map(({ node, x, y }) => (
           <line key={`line-${node.id}`} x1={center} y1={center} x2={x} y2={y} className="network-edge" />
         ))}
@@ -369,7 +377,7 @@ function DuplicateNetworkDiagram({ network }: { network: DealNetwork }) {
               [{indexOf.get(n.id)}] {n.company_name}
             </strong>
             <span className="related-list-meta">
-              {priceLabel(n)} / {n.business_flow ?? "商流不明"} / {n.relation === "root" ? "基準" : n.relation}
+              {priceLabel(n)} / {n.business_flow ?? t("ai.flowUnknown")} / {n.relation === "root" ? t("ai.baseline") : n.relation}
             </span>
           </li>
         ))}
@@ -379,8 +387,9 @@ function DuplicateNetworkDiagram({ network }: { network: DealNetwork }) {
 }
 
 function CandidateTab({ related }: { related: RelatedData | null }) {
-  if (!related) return <p className="ai-empty">読み込み中…</p>;
-  if (related.candidates.length === 0) return <p className="ai-empty">このメールから抽出された人材はまだありません。</p>;
+  const { t } = useTranslation();
+  if (!related) return <p className="ai-empty">{t("common.loading")}</p>;
+  if (related.candidates.length === 0) return <p className="ai-empty">{t("ai.noCandidatesExtracted")}</p>;
 
   return (
     <ul className="related-list">
@@ -388,7 +397,7 @@ function CandidateTab({ related }: { related: RelatedData | null }) {
         <li key={c.id}>
           <strong>{c.display_name}</strong>
           <div className="related-list-meta">
-            {c.location_preference ?? "希望勤務地未設定"} / {c.unit_price_min ?? "?"}〜{c.unit_price_max ?? "?"}万円 /{" "}
+            {c.location_preference ?? t("ai.desiredLocationUnset")} / {c.unit_price_min ?? "?"}〜{c.unit_price_max ?? "?"}万円 /{" "}
             {c.status}
           </div>
           <MatchFinder kind="candidate" id={c.id} />
@@ -399,6 +408,7 @@ function CandidateTab({ related }: { related: RelatedData | null }) {
 }
 
 function MatchFinder({ kind, id }: { kind: "deal" | "candidate"; id: string }) {
+  const { t } = useTranslation();
   const [matches, setMatches] = useState<{ label: string; score: number; rationale: string }[] | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -420,11 +430,11 @@ function MatchFinder({ kind, id }: { kind: "deal" | "candidate"; id: string }) {
   return (
     <div className="match-finder">
       <button onClick={run} disabled={loading}>
-        {loading ? "検索中…" : kind === "deal" ? "候補人材を探す" : "候補案件を探す"}
+        {loading ? t("common.searching") : kind === "deal" ? t("ai.findCandidates") : t("ai.findDeals")}
       </button>
       {matches && (
         <ul className="match-results">
-          {matches.length === 0 && <li className="ai-empty">候補が見つかりませんでした。</li>}
+          {matches.length === 0 && <li className="ai-empty">{t("ai.noMatchesFound")}</li>}
           {matches.map((m) => (
             <li key={m.label}>
               <span className="match-score">{Math.round(m.score * 100)}%</span>
@@ -439,17 +449,17 @@ function MatchFinder({ kind, id }: { kind: "deal" | "candidate"; id: string }) {
 }
 
 function MeetingTab({ related }: { related: RelatedData | null }) {
-  if (!related) return <p className="ai-empty">読み込み中…</p>;
-  if (related.meetings.length === 0) return <p className="ai-empty">このメールから抽出された会議はまだありません。</p>;
+  const { t } = useTranslation();
+  if (!related) return <p className="ai-empty">{t("common.loading")}</p>;
+  if (related.meetings.length === 0) return <p className="ai-empty">{t("ai.noMeetingsExtracted")}</p>;
 
   return (
     <ul className="related-list">
       {related.meetings.map((m) => (
         <li key={m.id}>
-          <strong>{m.platform.toUpperCase()}</strong>{" "}
-          {m.is_rescheduled && <span className="badge-reschedule">再設定</span>}
+          <strong>{m.platform.toUpperCase()}</strong> {m.is_rescheduled && <span className="badge-reschedule">{t("calendar.rescheduled")}</span>}
           <div className="related-list-meta">
-            {m.starts_at ? new Date(m.starts_at).toLocaleString("ja-JP") : "日時未確定"}
+            {m.starts_at ? new Date(m.starts_at).toLocaleString("ja-JP") : t("calendar.dateUnset")}
           </div>
           {m.join_url && (
             <a href={m.join_url} target="_blank" rel="noreferrer">

@@ -114,6 +114,7 @@ export interface SettingsData {
   anthropic_model: string;
   anonymize_before_send: boolean;
   duplicate_similarity_threshold: number;
+  ui_language: string;
   available_llm_providers: string[];
   has_openai_compatible_key: boolean;
   has_anthropic_key: boolean;
@@ -128,6 +129,7 @@ export interface SettingsUpdateInput {
   anthropic_model?: string;
   anonymize_before_send?: boolean;
   duplicate_similarity_threshold?: number;
+  ui_language?: string;
   openai_compatible_api_key?: string;
   anthropic_api_key?: string;
 }

@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     # Privacy / masking. See core/security.py.
     anonymize_before_send: bool = True
 
+    # UI display language. "ja" (default) or "en"; frontend reads/writes this
+    # via GET/PUT /settings so it's a per-install choice, not per-browser.
+    ui_language: str = "ja"
+
     duplicate_similarity_threshold: float = 0.86
     # How many above-threshold candidates get an LLM verification call per
     # duplicate-check run. Embedding similarity is cheap (or free, with the

@@ -9,10 +9,12 @@ import { AdminView } from "./components/AdminView";
 import { CalendarView } from "./components/CalendarView";
 import { api } from "./api/client";
 import type { MessageDetail, MessageHit, MessageSummary } from "./api/client";
+import { useTranslation } from "./i18n/I18nContext";
 
 type View = "mail" | "dashboard" | "meetings" | "admin" | "settings";
 
 export default function App() {
+  const { t } = useTranslation();
   const [view, setView] = useState<View>("mail");
   const [folder, setFolder] = useState("INBOX");
   const [messages, setMessages] = useState<MessageSummary[]>([]);
@@ -37,7 +39,7 @@ export default function App() {
         setMessages(list);
         setBackendError(null);
       })
-      .catch(() => setBackendError("バックエンドに接続できません。backend/README の手順で起動してください。"));
+      .catch(() => setBackendError(t("errors.backendUnreachable")));
   };
 
   useEffect(() => {
@@ -144,19 +146,19 @@ export default function App() {
         <span className="app-title">MailSort</span>
         <nav className="view-nav">
           <button className={view === "mail" ? "active" : ""} onClick={() => setView("mail")}>
-            メール
+            {t("nav.mail")}
           </button>
           <button className={view === "dashboard" ? "active" : ""} onClick={() => setView("dashboard")}>
-            ダッシュボード
+            {t("nav.dashboard")}
           </button>
           <button className={view === "meetings" ? "active" : ""} onClick={() => setView("meetings")}>
-            会議
+            {t("nav.meetings")}
           </button>
           <button className={view === "admin" ? "active" : ""} onClick={() => setView("admin")}>
-            管理
+            {t("nav.admin")}
           </button>
           <button className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}>
-            設定
+            {t("nav.settings")}
           </button>
         </nav>
         {view === "mail" && (
@@ -168,12 +170,12 @@ export default function App() {
             }}
           >
             <input
-              placeholder="メールを検索…"
+              placeholder={t("search.placeholder")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
             <button type="submit" disabled={searching}>
-              {searching ? "検索中…" : "検索"}
+              {searching ? t("common.searching") : t("search.submit")}
             </button>
             {searchResults && (
               <button
@@ -183,14 +185,14 @@ export default function App() {
                   setSearchResults(null);
                 }}
               >
-                クリア
+                {t("search.clear")}
               </button>
             )}
           </form>
         )}
         {backendError && <span className="backend-warning">{backendError}</span>}
-        <button className="theme-toggle" onClick={() => setDark((d) => !d)} aria-label="ダークモード切替">
-          {dark ? "☀ ライト" : "🌙 ダーク"}
+        <button className="theme-toggle" onClick={() => setDark((d) => !d)} aria-label={t("theme.toggleAria")}>
+          {dark ? t("theme.light") : t("theme.dark")}
         </button>
       </header>
 
@@ -217,22 +219,22 @@ export default function App() {
               ) : (
                 <>
                   <div className="detail-toolbar">
-                    <h2>{selectedMessage.subject || "(件名なし)"}</h2>
+                    <h2>{selectedMessage.subject || t("common.noSubject")}</h2>
                     {selectedMessage.folder === "Drafts" ? (
-                      <button onClick={() => setReplying(true)}>編集を続ける（r）</button>
+                      <button onClick={() => setReplying(true)}>{t("detail.continueEditing")}</button>
                     ) : (
                       <>
                         <button onClick={runClassify} disabled={classifying}>
-                          {classifying ? "分類中…" : selectedMessage.classification ? "再分類" : "AI分類を実行"}
+                          {classifying ? t("detail.classifying") : selectedMessage.classification ? t("detail.reclassify") : t("detail.runClassify")}
                         </button>
-                        <button onClick={() => setReplying(true)}>返信（r）</button>
+                        <button onClick={() => setReplying(true)}>{t("detail.reply")}</button>
                       </>
                     )}
                     <button onClick={toggleFlag} aria-pressed={selectedMessage.is_flagged}>
-                      {selectedMessage.is_flagged ? "★ フラグ解除" : "☆ フラグ"}
+                      {selectedMessage.is_flagged ? t("detail.unflag") : t("detail.flag")}
                     </button>
-                    <button onClick={() => moveToFolder("Archive")}>アーカイブ</button>
-                    <button onClick={() => moveToFolder("Trash")}>削除</button>
+                    <button onClick={() => moveToFolder("Archive")}>{t("detail.archive")}</button>
+                    <button onClick={() => moveToFolder("Trash")}>{t("common.delete")}</button>
                   </div>
                   <p className="detail-meta">
                     {selectedMessage.sender_name} &lt;{selectedMessage.sender_address}&gt;
@@ -255,7 +257,7 @@ export default function App() {
                 </>
               )
             ) : (
-              <p className="ai-empty">メールを選択してください（j/k で移動、r で返信）</p>
+              <p className="ai-empty">{t("detail.selectPrompt")}</p>
             )}
           </section>
           <AIPanel message={selectedMessage} />
@@ -266,6 +268,7 @@ export default function App() {
 }
 
 function BusinessCardButton({ attachmentId }: { attachmentId: string }) {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<"idle" | "saving" | "done" | "error">("idle");
 
   const register = async () => {
@@ -278,10 +281,10 @@ function BusinessCardButton({ attachmentId }: { attachmentId: string }) {
     }
   };
 
-  if (status === "done") return <span className="attachment-kind-badge">登録済み</span>;
+  if (status === "done") return <span className="attachment-kind-badge">{t("businessCard.registered")}</span>;
   return (
     <button onClick={register} disabled={status === "saving"} className="attachment-action-button">
-      {status === "saving" ? "登録中…" : status === "error" ? "失敗（再試行）" : "名刺として登録"}
+      {status === "saving" ? t("businessCard.registering") : status === "error" ? t("businessCard.failedRetry") : t("businessCard.register")}
     </button>
   );
 }

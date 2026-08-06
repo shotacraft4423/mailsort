@@ -15,6 +15,7 @@ from app.db.models.email import Attachment, EmailAccount, Message
 from app.db.models.meeting import Meeting
 from app.services import business_card_service
 from app.services.mail import smtp_client, sync_service
+from app.services.mail.html_text import html_to_text, looks_like_html
 from app.services.mail.threading_service import get_or_create_thread
 
 router = APIRouter(prefix="/mail", tags=["mail"])
@@ -71,6 +72,16 @@ class SendRequest(BaseModel):
     in_reply_to: str | None = None
 
 
+def _display_body_text(message: Message) -> str:
+    """Repairs messages synced before the imap_client HTML/plain-text fix
+    (see services/mail/html_text.py): those have raw HTML markup sitting in
+    body_text with body_html empty. Computed at read time rather than in a
+    migration so it also self-heals if the sniff heuristic improves later."""
+    if looks_like_html(message.body_text) and not message.body_html:
+        return html_to_text(message.body_text)
+    return message.body_text
+
+
 @router.get("", response_model=list[MessageOut])
 def list_messages(
     folder: str = "INBOX",
@@ -108,7 +119,7 @@ def get_message(message_id: str, db: Session = Depends(get_db)) -> MessageDetail
 
     return MessageDetailOut(
         **MessageOut.model_validate(message).model_dump(),
-        body_text=message.body_text,
+        body_text=_display_body_text(message),
         body_html=message.body_html,
         to_addresses=_parse_addresses(message.to_addresses),
         cc_addresses=_parse_addresses(message.cc_addresses),

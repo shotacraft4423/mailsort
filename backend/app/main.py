@@ -23,15 +23,34 @@ from app.api.routes import (
     settings as settings_routes,
 )
 from app.api.routes.plugins import PLUGINS_DIR, load_enabled_plugin_configs
+from app.api.routes.settings import apply_env_patch
 from app.db import session as db_session
 from app.db.session import init_db
+from app.services.settings_service import load_persisted_settings
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     init_db()
+    _load_persisted_settings()
     _load_enabled_plugins()
     yield
+
+
+def _load_persisted_settings() -> None:
+    """GUI-configured settings (AI provider, API keys, UI language) are
+    saved to the DB on every PUT /settings, but os.environ (which
+    core.config.Settings actually reads) is reset on every process
+    restart. Without this, a restart would silently fall back to
+    local_mock/no API key even though the user had configured a real
+    provider — see services/settings_service.py."""
+    db = db_session.SessionLocal()
+    try:
+        persisted = load_persisted_settings(db)
+    finally:
+        db.close()
+    if persisted:
+        apply_env_patch(persisted)
 
 
 def _load_enabled_plugins() -> None:

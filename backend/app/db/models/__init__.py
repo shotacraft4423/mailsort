@@ -9,6 +9,7 @@ from app.db.models.ai import (  # noqa: F401
     PromptVersion,
     TokenUsageLog,
 )
+from app.db.models.app_settings import AppSettings  # noqa: F401
 from app.db.models.company import Company, Contact  # noqa: F401
 from app.db.models.deal import Candidate, Deal, MatchScore  # noqa: F401
 from app.db.models.email import Attachment, EmailAccount, Message, Thread  # noqa: F401
@@ -25,6 +26,7 @@ __all__ = [
     "PromptTemplate",
     "PromptVersion",
     "TokenUsageLog",
+    "AppSettings",
     "Company",
     "Contact",
     "Candidate",

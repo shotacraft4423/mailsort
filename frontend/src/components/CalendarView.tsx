@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import type { MeetingSummary } from "../api/client";
 import { api } from "../api/client";
+import { useTranslation } from "../i18n/I18nContext";
 
 export function CalendarView() {
+  const { t } = useTranslation();
   const [meetings, setMeetings] = useState<MeetingSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -10,11 +12,11 @@ export function CalendarView() {
     api
       .listMeetings()
       .then(setMeetings)
-      .catch(() => setError("会議一覧を取得できませんでした。"));
+      .catch(() => setError(t("calendar.fetchError")));
   }, []);
 
   if (error) return <div className="view-container">{error}</div>;
-  if (!meetings) return <div className="view-container">読み込み中…</div>;
+  if (!meetings) return <div className="view-container">{t("common.loading")}</div>;
 
   const now = Date.now();
   const withDate = meetings.filter((m) => m.starts_at);
@@ -24,14 +26,14 @@ export function CalendarView() {
 
   return (
     <div className="view-container calendar-view">
-      <h2>会議</h2>
+      <h2>{t("nav.meetings")}</h2>
 
-      <h3>今後の会議 ({upcoming.length})</h3>
-      {upcoming.length === 0 ? <p className="ai-empty">予定されている会議はありません。</p> : <AgendaGroups meetings={upcoming} />}
+      <h3>{t("calendar.upcoming", { count: upcoming.length })}</h3>
+      {upcoming.length === 0 ? <p className="ai-empty">{t("calendar.noUpcoming")}</p> : <AgendaGroups meetings={upcoming} />}
 
       {undated.length > 0 && (
         <>
-          <h3>日時未確定 ({undated.length})</h3>
+          <h3>{t("calendar.undated", { count: undated.length })}</h3>
           <ul className="agenda-list">
             {undated.map((m) => (
               <MeetingRow key={m.id} meeting={m} />
@@ -40,8 +42,8 @@ export function CalendarView() {
         </>
       )}
 
-      <h3>過去の会議 ({past.length})</h3>
-      {past.length === 0 ? <p className="ai-empty">履歴はありません。</p> : <AgendaGroups meetings={past} />}
+      <h3>{t("calendar.past", { count: past.length })}</h3>
+      {past.length === 0 ? <p className="ai-empty">{t("calendar.noPast")}</p> : <AgendaGroups meetings={past} />}
     </div>
   );
 }
@@ -85,6 +87,7 @@ function AgendaGroups({ meetings }: { meetings: MeetingSummary[] }) {
 }
 
 function MeetingRow({ meeting }: { meeting: MeetingSummary }) {
+  const { t } = useTranslation();
   return (
     <li className="agenda-row">
       <span className="task-badge">{meeting.platform.toUpperCase()}</span>
@@ -93,11 +96,11 @@ function MeetingRow({ meeting }: { meeting: MeetingSummary }) {
           {new Date(meeting.starts_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}
         </span>
       )}
-      <span className="agenda-title">{meeting.title || "(件名なし)"}</span>
-      {meeting.is_rescheduled && <span className="badge-reschedule">再設定</span>}
+      <span className="agenda-title">{meeting.title || t("common.noSubject")}</span>
+      {meeting.is_rescheduled && <span className="badge-reschedule">{t("calendar.rescheduled")}</span>}
       {meeting.join_url && (
         <a href={meeting.join_url} target="_blank" rel="noreferrer" className="agenda-link">
-          参加リンク
+          {t("calendar.joinLink")}
         </a>
       )}
     </li>

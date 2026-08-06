@@ -1,18 +1,47 @@
 import { useEffect, useState } from "react";
 import type { AccountSummary, SettingsData } from "../api/client";
 import { api } from "../api/client";
+import { useTranslation } from "../i18n/I18nContext";
+import type { Language } from "../i18n/translations";
 
 export function SettingsView() {
+  const { t } = useTranslation();
   return (
     <div className="view-container settings-view">
-      <h2>設定</h2>
+      <h2>{t("nav.settings")}</h2>
+      <DisplaySection />
       <AccountsSection />
       <AISettingsSection />
     </div>
   );
 }
 
+function DisplaySection() {
+  const { t, language, setLanguage } = useTranslation();
+  const [saved, setSaved] = useState(false);
+
+  const onChange = (lang: Language) => {
+    setLanguage(lang);
+    setSaved(true);
+  };
+
+  return (
+    <section className="settings-section">
+      <h3>{t("settings.displayHeading")}</h3>
+      <label className="settings-row">
+        <span>{t("settings.languageLabel")}</span>
+        <select value={language} onChange={(e) => onChange(e.target.value as Language)}>
+          <option value="ja">日本語</option>
+          <option value="en">English</option>
+        </select>
+      </label>
+      {saved && <p className="reply-status">{t("settings.languageSaved")}</p>}
+    </section>
+  );
+}
+
 function AccountsSection() {
+  const { t } = useTranslation();
   const [accounts, setAccounts] = useState<AccountSummary[]>([]);
   const [form, setForm] = useState({
     display_name: "",
@@ -51,18 +80,18 @@ function AccountsSection() {
   };
 
   const syncNow = async (id: string) => {
-    setSyncStatus((prev) => ({ ...prev, [id]: "受信中…" }));
+    setSyncStatus((prev) => ({ ...prev, [id]: t("settings.syncing") }));
     try {
       const messages = await api.syncAccount(id, "INBOX");
-      setSyncStatus((prev) => ({ ...prev, [id]: `${messages.length}件の新着メールを取得しました。` }));
+      setSyncStatus((prev) => ({ ...prev, [id]: t("settings.syncResult", { count: messages.length }) }));
     } catch (err) {
-      setSyncStatus((prev) => ({ ...prev, [id]: err instanceof Error ? err.message : "受信に失敗しました。" }));
+      setSyncStatus((prev) => ({ ...prev, [id]: err instanceof Error ? err.message : t("settings.syncFailed") }));
     }
   };
 
   return (
     <section className="settings-section">
-      <h3>メールアカウント</h3>
+      <h3>{t("settings.accountsHeading")}</h3>
       <ul className="account-list">
         {accounts.map((a) => (
           <li key={a.id} className="account-list-row">
@@ -70,54 +99,54 @@ function AccountsSection() {
               {a.display_name} ({a.email_address})
             </span>
             <span className="account-list-actions">
-              <button onClick={() => syncNow(a.id)}>今すぐ受信</button>
-              <button onClick={() => removeAccount(a.id)}>削除</button>
+              <button onClick={() => syncNow(a.id)}>{t("settings.syncNow")}</button>
+              <button onClick={() => removeAccount(a.id)}>{t("common.delete")}</button>
             </span>
             {syncStatus[a.id] && <p className="reply-status account-sync-status">{syncStatus[a.id]}</p>}
           </li>
         ))}
-        {accounts.length === 0 && <li className="ai-empty">登録済みアカウントはありません。</li>}
+        {accounts.length === 0 && <li className="ai-empty">{t("settings.noAccounts")}</li>}
       </ul>
 
       <div className="account-form">
         <input
-          placeholder="表示名"
+          placeholder={t("settings.displayNamePlaceholder")}
           value={form.display_name}
           onChange={(e) => setForm({ ...form, display_name: e.target.value })}
         />
         <input
-          placeholder="メールアドレス"
+          placeholder={t("settings.emailPlaceholder")}
           value={form.email_address}
           onChange={(e) => setForm({ ...form, email_address: e.target.value })}
         />
         <div className="account-form-row">
           <input
-            placeholder="IMAPホスト（例: imap.gmail.com）"
+            placeholder={t("settings.imapHostPlaceholder")}
             value={form.imap_host}
             onChange={(e) => setForm({ ...form, imap_host: e.target.value })}
           />
           <input
             type="number"
-            placeholder="IMAPポート"
+            placeholder={t("settings.imapPortPlaceholder")}
             value={form.imap_port}
             onChange={(e) => setForm({ ...form, imap_port: Number(e.target.value) })}
           />
         </div>
         <div className="account-form-row">
           <input
-            placeholder="SMTPホスト（例: smtp.gmail.com）"
+            placeholder={t("settings.smtpHostPlaceholder")}
             value={form.smtp_host}
             onChange={(e) => setForm({ ...form, smtp_host: e.target.value })}
           />
           <input
             type="number"
-            placeholder="SMTPポート"
+            placeholder={t("settings.smtpPortPlaceholder")}
             value={form.smtp_port}
             onChange={(e) => setForm({ ...form, smtp_port: Number(e.target.value) })}
           />
         </div>
         <label className="settings-row">
-          <span>SSL/TLSを使用（オフの場合はSTARTTLSを試行。例: SMTP 587番ポートはオフ推奨）</span>
+          <span>{t("settings.useSslLabel")}</span>
           <input
             type="checkbox"
             checked={form.use_ssl}
@@ -126,23 +155,21 @@ function AccountsSection() {
         </label>
         <input
           type="password"
-          placeholder="パスワード（暗号化して保存されます）"
+          placeholder={t("settings.passwordPlaceholder")}
           value={form.password}
           onChange={(e) => setForm({ ...form, password: e.target.value })}
         />
         <button onClick={addAccount} disabled={saving}>
-          アカウント追加
+          {t("settings.addAccount")}
         </button>
       </div>
-      <p className="ai-empty">
-        よくあるポート番号: IMAP SSL=993 / SMTP SSL=465 / SMTP STARTTLS=587（587の場合は上のSSL/TLSチェックを外してください）。
-        Gmailは2段階認証を有効にした上で「アプリパスワード」を発行し、通常のパスワード欄にはそちらを入力してください。
-      </p>
+      <p className="ai-empty">{t("settings.portsHelp")}</p>
     </section>
   );
 }
 
 function AISettingsSection() {
+  const { t } = useTranslation();
   const [settings, setSettings] = useState<SettingsData | null>(null);
   const [saving, setSaving] = useState(false);
   const [openaiKeyInput, setOpenaiKeyInput] = useState("");
@@ -153,7 +180,7 @@ function AISettingsSection() {
     api.getSettings().then(setSettings).catch(() => setSettings(null));
   }, []);
 
-  if (!settings) return <section className="settings-section">読み込み中…</section>;
+  if (!settings) return <section className="settings-section">{t("common.loading")}</section>;
 
   const update = async (patch: Partial<SettingsData> & { openai_compatible_api_key?: string; anthropic_api_key?: string }) => {
     setSaving(true);
@@ -169,22 +196,22 @@ function AISettingsSection() {
     if (!openaiKeyInput.trim()) return;
     await update({ openai_compatible_api_key: openaiKeyInput.trim(), llm_provider: "openai_compatible" });
     setOpenaiKeyInput("");
-    setSavedMessage("OpenAI互換のAPIキーを保存しました。プロバイダーを openai_compatible に切り替えました。");
+    setSavedMessage(t("settings.openaiKeySaved"));
   };
 
   const saveAnthropicKey = async () => {
     if (!anthropicKeyInput.trim()) return;
     await update({ anthropic_api_key: anthropicKeyInput.trim() });
     setAnthropicKeyInput("");
-    setSavedMessage("Anthropic のAPIキーを保存しました。");
+    setSavedMessage(t("settings.anthropicKeySaved"));
   };
 
   return (
     <section className="settings-section">
-      <h3>AI設定</h3>
+      <h3>{t("settings.aiHeading")}</h3>
 
       <label className="settings-row">
-        <span>AI機能を有効化</span>
+        <span>{t("settings.aiEnabledLabel")}</span>
         <input
           type="checkbox"
           checked={settings.ai_enabled}
@@ -194,7 +221,7 @@ function AISettingsSection() {
       </label>
 
       <label className="settings-row">
-        <span>LLMプロバイダー</span>
+        <span>{t("settings.llmProviderLabel")}</span>
         <select value={settings.llm_provider} onChange={(e) => update({ llm_provider: e.target.value })} disabled={saving}>
           {settings.available_llm_providers.map((p) => (
             <option key={p} value={p}>
@@ -205,7 +232,7 @@ function AISettingsSection() {
       </label>
 
       <label className="settings-row">
-        <span>OpenAI互換 base_url</span>
+        <span>{t("settings.baseUrlLabel")}</span>
         <input
           value={settings.openai_compatible_base_url}
           onChange={(e) => update({ openai_compatible_base_url: e.target.value })}
@@ -214,7 +241,7 @@ function AISettingsSection() {
       </label>
 
       <label className="settings-row">
-        <span>OpenAI互換モデル</span>
+        <span>{t("settings.modelLabel")}</span>
         <input
           value={settings.openai_compatible_model}
           onChange={(e) => update({ openai_compatible_model: e.target.value })}
@@ -223,7 +250,7 @@ function AISettingsSection() {
       </label>
 
       <label className="settings-row">
-        <span>APIキー送信前に匿名化する</span>
+        <span>{t("settings.anonymizeLabel")}</span>
         <input
           type="checkbox"
           checked={settings.anonymize_before_send}
@@ -233,7 +260,7 @@ function AISettingsSection() {
       </label>
 
       <label className="settings-row">
-        <span>OpenAI APIキー（{settings.has_openai_compatible_key ? "設定済み" : "未設定"}）</span>
+        <span>{t("settings.openaiKeyLabel", { status: settings.has_openai_compatible_key ? t("settings.configured") : t("settings.notConfigured") })}</span>
         <span className="settings-key-input">
           <input
             type="password"
@@ -243,13 +270,13 @@ function AISettingsSection() {
             disabled={saving}
           />
           <button onClick={saveOpenaiKey} disabled={saving || !openaiKeyInput.trim()}>
-            保存
+            {t("common.save")}
           </button>
         </span>
       </label>
 
       <label className="settings-row">
-        <span>Anthropic APIキー（{settings.has_anthropic_key ? "設定済み" : "未設定"}）</span>
+        <span>{t("settings.anthropicKeyLabel", { status: settings.has_anthropic_key ? t("settings.configured") : t("settings.notConfigured") })}</span>
         <span className="settings-key-input">
           <input
             type="password"
@@ -259,16 +286,14 @@ function AISettingsSection() {
             disabled={saving}
           />
           <button onClick={saveAnthropicKey} disabled={saving || !anthropicKeyInput.trim()}>
-            保存
+            {t("common.save")}
           </button>
         </span>
       </label>
 
       {savedMessage && <p className="reply-status">{savedMessage}</p>}
 
-      <p className="ai-empty">
-        保存したキーはこの画面に再表示されません。GPT-4o miniなど低コストモデルが既定のため、まずはOpenAIキーの保存だけで動作確認できます。
-      </p>
+      <p className="ai-empty">{t("settings.aiHelp")}</p>
     </section>
   );
 }

@@ -43,6 +43,29 @@ def test_parse_extracts_subject_sender_body_and_attachment():
     assert data == b"dummy-bytes"
 
 
+def test_parse_html_only_single_part_message_does_not_leak_raw_markup():
+    # Reproduces a real report: OpenAI's account-notification emails (and
+    # much other automated mail) are single-part text/html with no
+    # multipart/alternative text/plain fallback. Before the fix, the
+    # `else` branch in ImapConnector._parse blindly assigned the raw
+    # decoded payload to body_text regardless of Content-Type, so the
+    # message detail view rendered "<!DOCTYPE html><html>..." verbatim.
+    msg = EmailMessage()
+    msg["Subject"] = "New sign-in to your OpenAI account"
+    msg["From"] = "OpenAI <noreply@tm.openai.com>"
+    msg["Date"] = "Tue, 05 Aug 2025 10:00:00 +0900"
+    msg.add_header("Content-Type", "text/html", charset="utf-8")
+    msg.set_payload("<!DOCTYPE html><html><body><p>New sign-in detected.</p></body></html>", charset="utf-8")
+
+    connector = ImapConnector(account=None)
+    parsed = connector._parse("1", bytes(msg))
+
+    assert "<html" not in parsed.body_text.lower()
+    assert "<!doctype" not in parsed.body_text.lower()
+    assert "New sign-in detected." in parsed.body_text
+    assert "<html" in parsed.body_html.lower()
+
+
 def test_parse_handles_missing_date_gracefully():
     msg = EmailMessage()
     msg["Subject"] = "件名のみ"

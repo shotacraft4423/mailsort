@@ -17,6 +17,7 @@ from email.utils import parsedate_to_datetime
 
 from app.core.security import decrypt_secret
 from app.db.models.email import EmailAccount
+from app.services.mail.html_text import html_to_text
 
 # Matches an IMAP LIST response line: (flags) "delimiter" name
 # e.g. `(\HasNoChildren) "/" "INBOX"` or `(\Noselect \HasChildren) "/" INBOX`
@@ -138,8 +139,19 @@ class ImapConnector:
                 elif content_type == "text/html" and not body_html:
                     body_html = (part.get_payload(decode=True) or b"").decode(part.get_content_charset() or "utf-8", errors="replace")
         else:
-            payload = msg.get_payload(decode=True) or b""
-            body_text = payload.decode(msg.get_content_charset() or "utf-8", errors="replace")
+            # Single-part message: this used to always land in body_text
+            # regardless of Content-Type, so an HTML-only message (no
+            # multipart/alternative text/plain fallback — common for
+            # automated notification mail) showed its raw markup
+            # (<!DOCTYPE html>...) as if it were the message text.
+            payload = (msg.get_payload(decode=True) or b"").decode(msg.get_content_charset() or "utf-8", errors="replace")
+            if msg.get_content_type() == "text/html":
+                body_html = payload
+            else:
+                body_text = payload
+
+        if not body_text and body_html:
+            body_text = html_to_text(body_html)
 
         received_at = None
         if msg.get("Date"):
