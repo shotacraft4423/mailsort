@@ -30,6 +30,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<MessageHit[] | null>(null);
   const [searching, setSearching] = useState(false);
+  const [useAiSearch, setUseAiSearch] = useState(false);
   const [classifying, setClassifying] = useState(false);
   const [classifyError, setClassifyError] = useState<string | null>(null);
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number; failed: number } | null>(null);
@@ -189,7 +190,13 @@ export default function App() {
     }
     setSearching(true);
     try {
-      const results = await api.search(searchQuery);
+      // Scoped to whichever folder/account is currently open — "案件の中
+      // だけ検索したい" shouldn't require scanning every folder first. AI
+      // search additionally lets the query itself be a natural-language
+      // filter ("単価80万以上の案件だけ") instead of a plain substring.
+      const results = useAiSearch
+        ? await api.searchNatural(searchQuery, folder, selectedAccountId ?? undefined)
+        : await api.search(searchQuery, folder, selectedAccountId ?? undefined);
       setSearchResults(results);
     } finally {
       setSearching(false);
@@ -306,10 +313,18 @@ export default function App() {
               }}
             >
               <input
-                placeholder={t("search.placeholder")}
+                placeholder={useAiSearch ? t("search.aiPlaceholder") : t("search.placeholder")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
+              <button
+                type="button"
+                className={useAiSearch ? "search-ai-toggle active" : "search-ai-toggle"}
+                onClick={() => setUseAiSearch((v) => !v)}
+                title={t("search.aiToggleHelp")}
+              >
+                {t("search.aiToggle")}
+              </button>
               <button type="submit" disabled={searching}>
                 {searching ? t("common.searching") : t("search.submit")}
               </button>

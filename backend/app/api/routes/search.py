@@ -19,11 +19,15 @@ class MessageHit(BaseModel):
 
 
 @router.get("", response_model=list[MessageHit])
-def full_text_search(q: str, limit: int = 50, db: Session = Depends(get_db)) -> list:
+def full_text_search(
+    q: str, limit: int = 50, folder: str | None = None, account_id: str | None = None, db: Session = Depends(get_db)
+) -> list:
     backend = search_service.SqliteLikeBackend()
-    return backend.search(db, q, limit=limit)
+    return backend.search(db, q, limit=limit, folder=folder, account_id=account_id)
 
 
 @router.get("/natural", response_model=list[MessageHit])
-def natural_search(q: str, limit: int = 50, db: Session = Depends(get_db)) -> list:
-    return search_service.natural_language_search(db, q, limit=limit)
+async def natural_search(
+    q: str, limit: int = 50, folder: str | None = None, account_id: str | None = None, db: Session = Depends(get_db)
+) -> list:
+    return await search_service.ai_search(db, q, limit=limit, folder=folder, account_id=account_id)

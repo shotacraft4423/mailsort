@@ -517,6 +517,13 @@ a:focus-visible {
   flex-shrink: 0;
 }
 
+.search-ai-toggle.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
 .bulk-classify {
   display: flex;
   align-items: center;

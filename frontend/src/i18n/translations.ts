@@ -31,7 +31,10 @@ export const translations = {
 
     "errors.backendUnreachable": "バックエンドに接続できません。backend/README の手順で起動してください。",
 
-    "search.placeholder": "メールを検索…",
+    "search.placeholder": "このフォルダ内を検索…",
+    "search.aiPlaceholder": "例: 単価80万以上の案件だけ見せて",
+    "search.aiToggle": "🔍 AI検索",
+    "search.aiToggleHelp": "ONにすると、入力した自由文をAIが条件（分類・単価・返信要否など）に変換して絞り込みます。現在開いているフォルダ・アカウント内が対象です。",
     "search.submit": "検索",
     "search.clear": "クリア",
 
@@ -338,7 +341,10 @@ export const translations = {
 
     "errors.backendUnreachable": "Can't connect to the backend. Start it following backend/README.",
 
-    "search.placeholder": "Search mail…",
+    "search.placeholder": "Search this folder…",
+    "search.aiPlaceholder": "e.g. only deals with a unit price of 800k+",
+    "search.aiToggle": "🔍 AI search",
+    "search.aiToggleHelp": "When on, your free-text query is translated by AI into filters (category, unit price, reply-required, etc). Scoped to whichever folder/account is currently open.",
     "search.submit": "Search",
     "search.clear": "Clear",
 

@@ -434,8 +434,18 @@ export const api = {
   updateMeeting: (id: string, input: { is_hidden: boolean }) =>
     request<MeetingSummary>(`/meetings/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
 
-  search: (q: string) => request<MessageHit[]>(`/search?q=${encodeURIComponent(q)}`),
-  searchNatural: (q: string) => request<MessageHit[]>(`/search/natural?q=${encodeURIComponent(q)}`),
+  search: (q: string, folder?: string, accountId?: string) =>
+    request<MessageHit[]>(
+      `/search?q=${encodeURIComponent(q)}${folder ? `&folder=${encodeURIComponent(folder)}` : ""}${
+        accountId ? `&account_id=${accountId}` : ""
+      }`
+    ),
+  searchNatural: (q: string, folder?: string, accountId?: string) =>
+    request<MessageHit[]>(
+      `/search/natural?q=${encodeURIComponent(q)}${folder ? `&folder=${encodeURIComponent(folder)}` : ""}${
+        accountId ? `&account_id=${accountId}` : ""
+      }`
+    ),
 
   listPrompts: () => request<PromptTemplate[]>("/prompts"),
   getPromptDefaults: (task: string) => request<PromptDefaults>(`/prompts/defaults?task=${encodeURIComponent(task)}`),
