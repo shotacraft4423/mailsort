@@ -8,10 +8,13 @@ no `response_format`) to warrant its own class (see anthropic.py).
 from __future__ import annotations
 
 import json
+import re
 
 import httpx
 
 from app.providers.llm.base import LLMProvider, LLMProviderError, LLMResponse
+
+_CODE_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE | re.MULTILINE)
 
 
 class OpenAICompatibleProvider(LLMProvider):
@@ -48,6 +51,16 @@ class OpenAICompatibleProvider(LLMProvider):
                 )
             resp.raise_for_status()
             data = resp.json()
+        except httpx.HTTPStatusError as exc:
+            # raise_for_status()'s own message is just "400 Bad Request for
+            # url ..." — the actual reason (invalid API key, model doesn't
+            # support response_format=json_object, quota exhausted, ...) is
+            # in the response body, which callers need to see (via
+            # AIAnalysis.fallback_reason) to have any chance of diagnosing
+            # "everything falls back to the offline rules" from the app
+            # alone, without server console access.
+            body_excerpt = exc.response.text[:300] if exc.response is not None else ""
+            raise LLMProviderError(f"{self.name} request failed: {exc} — {body_excerpt}") from exc
         except (httpx.HTTPError, ValueError) as exc:
             raise LLMProviderError(f"{self.name} request failed: {exc}") from exc
 
@@ -65,11 +78,27 @@ class OpenAICompatibleProvider(LLMProvider):
         )
 
     async def complete_json(self, *, system_prompt: str, user_prompt: str) -> tuple[dict, LLMResponse]:
-        response = await self._chat(system_prompt=system_prompt, user_prompt=user_prompt, force_json=True)
+        try:
+            response = await self._chat(system_prompt=system_prompt, user_prompt=user_prompt, force_json=True)
+        except LLMProviderError:
+            # Some OpenAI-compatible endpoints (certain proxies/gateways,
+            # older self-hosted models) reject response_format=json_object
+            # outright even though a plain chat completion works fine —
+            # exactly the gap between this method and complete_text, which
+            # never sets it. Retry once without it and parse JSON out of
+            # the free-text reply (stripping a ```json fence if the model
+            # added one) instead of giving up and falling back to the
+            # offline rules for every single message.
+            response = await self._chat(system_prompt=system_prompt, user_prompt=user_prompt, force_json=False)
+
         try:
             parsed = json.loads(response.text)
-        except json.JSONDecodeError as exc:
-            raise LLMProviderError(f"{self.name} did not return valid JSON: {exc}") from exc
+        except json.JSONDecodeError:
+            stripped = _CODE_FENCE_RE.sub("", response.text.strip())
+            try:
+                parsed = json.loads(stripped)
+            except json.JSONDecodeError as exc:
+                raise LLMProviderError(f"{self.name} did not return valid JSON: {exc}") from exc
         return parsed, response
 
     async def complete_text(self, *, system_prompt: str, user_prompt: str) -> LLMResponse:
