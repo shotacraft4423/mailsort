@@ -46,10 +46,21 @@ export function FolderList({ active, activeAccountId, onSelect }: Props) {
   useEffect(() => {
     let cancelled = false;
 
-    Promise.all([api.listAccounts(), api.listLocalFolders().catch(() => [] as string[])])
-      .then(async ([accounts, localFolders]) => {
+    Promise.all([
+      api.listAccounts(),
+      api.listLocalFolders().catch(() => [] as string[]),
+      // User-created folders (see AdminView's フォルダ tab) have no mail in
+      // them yet at creation time, so they'd never show up via
+      // listLocalFolders (which only reports folders actual messages sit
+      // in) — merge them in by name so a brand-new empty folder is visible
+      // in the sidebar immediately instead of only appearing once a rule
+      // has routed something into it.
+      api.listCustomFolders().catch(() => []),
+    ])
+      .then(async ([accounts, localFolders, customFolders]) => {
         const accountsWithImap = accounts.filter((a) => a.protocol === "imap_smtp");
         if (!cancelled) setImapAccounts(accountsWithImap);
+        const customFolderNames = customFolders.map((f) => f.name);
 
         let base = DEFAULT_FOLDERS;
         if (accountsWithImap[0]) {
@@ -60,7 +71,8 @@ export function FolderList({ active, activeAccountId, onSelect }: Props) {
             base = DEFAULT_FOLDERS;
           }
         }
-        if (!cancelled) setUnifiedFolders(sortFolders(dedupe([...base, ...localFolders, ...ROUTING_FOLDERS])));
+        if (!cancelled)
+          setUnifiedFolders(sortFolders(dedupe([...base, ...localFolders, ...customFolderNames, ...ROUTING_FOLDERS])));
 
         // Only worth fetching per-account folder lists once there's
         // actually more than one account to distinguish between —

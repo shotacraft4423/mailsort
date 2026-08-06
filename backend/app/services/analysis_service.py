@@ -198,6 +198,18 @@ _CATEGORY_FOLDER_MAP = {
     "迷惑メール": "Junk",
 }
 
+# A message currently sitting in one of the heuristic's own possible
+# destinations (including "要返信", which isn't in the map above since
+# it's driven by reply_required rather than a category) is fair game to
+# re-route — otherwise a message auto-filed under the wrong category on
+# an earlier pass (e.g. the model's top category differed then, or an
+# older build of this heuristic decided differently) stayed wrong
+# forever: re-classifying only ever routed messages still sitting in
+# INBOX, and this heuristic is exactly what put it in the "wrong" folder
+# in the first place. A message anywhere else (Archive/Trash/Sent/Drafts,
+# or a custom folder a rule or the user filed it into) is left alone.
+_AUTO_ROUTABLE_FOLDERS = {"INBOX", "要返信", *_CATEGORY_FOLDER_MAP.values()}
+
 
 def _apply_post_analysis_side_effects(
     db: Session,
@@ -243,15 +255,17 @@ def _route_to_category_folder(db: Session, message: Message, classification: Cla
     """"せっかく分類したんだからその分類ごとにフォルダへの振り分けが欲しい" —
     classification previously only ever produced tags/badges the user had
     to go looking for; nothing moved the message anywhere. Only touches
-    messages still sitting in INBOX so it never yanks something out of a
-    folder the user (or a rule) already filed it into on purpose."""
-    if not settings.auto_route_by_classification or message.folder != "INBOX":
+    messages sitting in INBOX or one of this heuristic's own destination
+    folders, so it can correct its own past decisions but never yanks
+    something out of a folder the user (or a rule) filed it into on
+    purpose (Archive/Trash/Sent/Drafts/a custom rule folder)."""
+    if not settings.auto_route_by_classification or message.folder not in _AUTO_ROUTABLE_FOLDERS:
         return
 
     target = _CATEGORY_FOLDER_MAP.get(classification.top_category())
     if target is None and classification.reply_required:
         target = "要返信"
-    if target:
+    if target and target != message.folder:
         message.folder = target
         db.commit()
 

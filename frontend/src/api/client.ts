@@ -338,6 +338,11 @@ export interface ContactSummary {
   source: string;
 }
 
+export interface CustomFolder {
+  id: string;
+  name: string;
+}
+
 export interface ContactTimelineEntry {
   message_id: string;
   subject: string;
@@ -459,4 +464,9 @@ export const api = {
   listContacts: () => request<ContactSummary[]>("/contacts"),
   getContactTimeline: (id: string) => request<ContactTimelineEntry[]>(`/contacts/${id}/timeline`),
   summarizeContact: (id: string) => request<{ summary: string }>(`/contacts/${id}/summarize`, { method: "POST" }),
+
+  listCustomFolders: () => request<CustomFolder[]>("/folders"),
+  createCustomFolder: (name: string) => request<CustomFolder>("/folders", { method: "POST", body: JSON.stringify({ name }) }),
+  deleteCustomFolder: (id: string) =>
+    request<{ status: string; messages_moved_to_inbox: number }>(`/folders/${id}`, { method: "DELETE" }),
 };

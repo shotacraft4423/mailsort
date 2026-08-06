@@ -13,6 +13,7 @@ from app.db.models.app_settings import AppSettings  # noqa: F401
 from app.db.models.company import Company, Contact  # noqa: F401
 from app.db.models.deal import Candidate, Deal, MatchScore  # noqa: F401
 from app.db.models.email import Attachment, EmailAccount, Message, Thread  # noqa: F401
+from app.db.models.folder import CustomFolder  # noqa: F401
 from app.db.models.meeting import Meeting  # noqa: F401
 from app.db.models.plugin import PluginConfig  # noqa: F401
 from app.db.models.rule import Rule  # noqa: F401
@@ -36,6 +37,7 @@ __all__ = [
     "EmailAccount",
     "Message",
     "Thread",
+    "CustomFolder",
     "Meeting",
     "PluginConfig",
     "Rule",

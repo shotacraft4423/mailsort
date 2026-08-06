@@ -50,6 +50,30 @@ async def test_message_not_in_inbox_is_never_moved(db_session):
 
 
 @pytest.mark.asyncio
+async def test_message_misrouted_to_the_wrong_auto_folder_gets_corrected(db_session):
+    """A real user report: a 人材紹介 message ended up filed under 案件 (and
+    人材 stayed empty) and running "AI分類を実行"/bulk-classify again did
+    not fix it — because the message was no longer in INBOX, the old guard
+    treated it as "already filed on purpose" and left it exactly where it
+    (wrongly) already was. Re-routing must be able to correct its own past
+    decisions, not just file brand-new INBOX mail."""
+    message = _make_message(db_session, subject="人材のご紹介", body_text="人材のご紹介です。", folder="案件")
+
+    await analysis_service.analyze_message(db_session, message, force=True)
+
+    assert db_session.query(Message).filter(Message.id == message.id).one().folder == "人材"
+
+
+@pytest.mark.asyncio
+async def test_message_manually_filed_by_a_rule_into_a_custom_folder_is_left_alone(db_session):
+    message = _make_message(db_session, subject="Java案件のご紹介", body_text="Java案件のご紹介です。", folder="最重要顧客")
+
+    await analysis_service.analyze_message(db_session, message, force=True)
+
+    assert db_session.query(Message).filter(Message.id == message.id).one().folder == "最重要顧客"
+
+
+@pytest.mark.asyncio
 async def test_routing_disabled_via_settings_leaves_message_in_inbox(db_session, monkeypatch):
     monkeypatch.setenv("MAILSORT_AUTO_ROUTE_BY_CLASSIFICATION", "false")
     from app.core.config import get_settings

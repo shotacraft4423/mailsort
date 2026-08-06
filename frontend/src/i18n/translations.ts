@@ -166,6 +166,16 @@ export const translations = {
     "admin.tabPrompts": "プロンプト",
     "admin.tabRules": "ルール",
     "admin.tabPlugins": "プラグイン",
+    "admin.tabFolders": "フォルダ",
+    "admin.foldersHelp":
+      "案件・人材・重要・要返信の既定フォルダに加えて、自由な名前のフォルダを追加・削除できます。" +
+      "追加したフォルダにメールを振り分ける基準（キーワードや分類結果など）は「ルールを設定」からルール画面で指定してください。" +
+      "フォルダを削除しても、そこに入っていたメールは削除されず受信トレイに戻ります。",
+    "admin.noFolders": "追加のフォルダはまだありません。",
+    "admin.newFolderHeading": "新規フォルダ作成",
+    "admin.folderNamePlaceholder": "フォルダ名",
+    "admin.setRoutingRule": "振り分けルールを設定",
+    "admin.rulePrefillName": "「{folder}」への振り分け",
     "admin.promptsHelp":
       "分類・抽出タスクは、下の「タスク」欄でこのタスクに使うテンプレートを有効化すると、バックエンドの既定プロンプトの代わりに使用されます。" +
       "まずは既存のテンプレートを開いて内容を確認し、必要な部分だけ書き換えるのがおすすめです。",
@@ -451,6 +461,16 @@ export const translations = {
     "admin.tabPrompts": "Prompts",
     "admin.tabRules": "Rules",
     "admin.tabPlugins": "Plugins",
+    "admin.tabFolders": "Folders",
+    "admin.foldersHelp":
+      "Beyond the built-in Deal/Candidate/Important/Needs-reply folders, you can add and delete folders with any name. " +
+      "To set the criteria (keywords, classification result, etc.) that route mail into a folder you add, use \"Set routing rule\" to jump to the Rules tab. " +
+      "Deleting a folder never deletes the mail in it — it moves back to the inbox.",
+    "admin.noFolders": "No additional folders yet.",
+    "admin.newFolderHeading": "Create a new folder",
+    "admin.folderNamePlaceholder": "Folder name",
+    "admin.setRoutingRule": "Set routing rule",
+    "admin.rulePrefillName": "Route to \"{folder}\"",
     "admin.promptsHelp":
       "For classification/extraction tasks, activating a template for that task below replaces the backend's built-in default prompt. " +
       "It's easiest to open an existing template first and only edit the parts you need.",

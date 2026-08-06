@@ -1,13 +1,24 @@
 import { useEffect, useState } from "react";
-import type { PluginInfo, PromptTemplate, Rule, RuleAction, RuleCondition } from "../api/client";
+import type { CustomFolder, PluginInfo, PromptTemplate, Rule, RuleAction, RuleCondition } from "../api/client";
 import { api } from "../api/client";
 import { useTranslation } from "../i18n/I18nContext";
 
-type AdminTab = "prompts" | "rules" | "plugins";
+type AdminTab = "prompts" | "rules" | "plugins" | "folders";
 
 export function AdminView() {
   const { t } = useTranslation();
   const [tab, setTab] = useState<AdminTab>("prompts");
+  // Set by FoldersPanel's "set routing rule" button so RulesPanel can open
+  // pre-filled with a move_to_folder action targeting that folder — without
+  // this, "add a folder" and "define what routes into it" would be two
+  // disconnected screens the user has to correlate by typing the folder
+  // name into the rule form themselves.
+  const [rulePrefillFolder, setRulePrefillFolder] = useState<string | null>(null);
+
+  const requestRuleForFolder = (folder: string) => {
+    setRulePrefillFolder(folder);
+    setTab("rules");
+  };
 
   return (
     <div className="view-container admin-view">
@@ -19,14 +30,20 @@ export function AdminView() {
         <button className={tab === "rules" ? "active" : ""} onClick={() => setTab("rules")}>
           {t("admin.tabRules")}
         </button>
+        <button className={tab === "folders" ? "active" : ""} onClick={() => setTab("folders")}>
+          {t("admin.tabFolders")}
+        </button>
         <button className={tab === "plugins" ? "active" : ""} onClick={() => setTab("plugins")}>
           {t("admin.tabPlugins")}
         </button>
       </div>
 
       {tab === "prompts" && <PromptsPanel />}
-      {tab === "rules" && <RulesPanel />}
+      {tab === "rules" && (
+        <RulesPanel prefillFolder={rulePrefillFolder} onPrefillConsumed={() => setRulePrefillFolder(null)} />
+      )}
       {tab === "plugins" && <PluginsPanel />}
+      {tab === "folders" && <FoldersPanel onRequestRuleForFolder={requestRuleForFolder} />}
     </div>
   );
 }
@@ -187,7 +204,12 @@ const RULE_FIELDS = ["subject", "sender_address", "sender_name", "body_text", "m
 const RULE_OPERATORS = ["equals", "contains", "starts_with", "in"];
 const ACTION_TYPES = ["tag", "move_to_folder", "notify_slack"];
 
-function RulesPanel() {
+interface RulesPanelProps {
+  prefillFolder?: string | null;
+  onPrefillConsumed?: () => void;
+}
+
+function RulesPanel({ prefillFolder, onPrefillConsumed }: RulesPanelProps) {
   const { t } = useTranslation();
   const [rules, setRules] = useState<Rule[]>([]);
   const [name, setName] = useState("");
@@ -202,6 +224,14 @@ function RulesPanel() {
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    if (!prefillFolder) return;
+    setActions([{ type: "move_to_folder", params: { folder: prefillFolder } }]);
+    setName((prev) => prev || t("admin.rulePrefillName", { folder: prefillFolder }));
+    onPrefillConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillFolder]);
 
   const addConditionRow = () => setConditions([...conditions, { field: RULE_FIELDS[0], operator: "contains", value: "" }]);
   const updateCondition = (index: number, patch: Partial<RuleCondition>) =>
@@ -336,6 +366,72 @@ function RulesPanel() {
 
         <button className="primary" onClick={createRule} disabled={saving}>
           {t("admin.createRule")}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+interface FoldersPanelProps {
+  onRequestRuleForFolder: (folder: string) => void;
+}
+
+function FoldersPanel({ onRequestRuleForFolder }: FoldersPanelProps) {
+  const { t } = useTranslation();
+  const [folders, setFolders] = useState<CustomFolder[]>([]);
+  const [name, setName] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const load = () => api.listCustomFolders().then(setFolders).catch(() => setFolders([]));
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const create = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      await api.createCustomFolder(name.trim());
+      setName("");
+      await load();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async (id: string) => {
+    await api.deleteCustomFolder(id);
+    await load();
+  };
+
+  return (
+    <section className="admin-panel">
+      <p className="ai-empty">{t("admin.foldersHelp")}</p>
+
+      <ul className="rule-list">
+        {folders.map((f) => (
+          <li key={f.id} className="rule-card">
+            <div className="rule-card-header">
+              <strong>{f.name}</strong>
+              <button onClick={() => onRequestRuleForFolder(f.name)}>{t("admin.setRoutingRule")}</button>
+              <button onClick={() => remove(f.id)}>{t("common.delete")}</button>
+            </div>
+          </li>
+        ))}
+        {folders.length === 0 && <li className="ai-empty">{t("admin.noFolders")}</li>}
+      </ul>
+
+      <div className="prompt-create-form">
+        <h4>{t("admin.newFolderHeading")}</h4>
+        <input
+          placeholder={t("admin.folderNamePlaceholder")}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && create()}
+        />
+        <button className="primary" onClick={create} disabled={saving}>
+          {t("common.create")}
         </button>
       </div>
     </section>
