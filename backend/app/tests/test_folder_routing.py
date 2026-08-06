@@ -11,7 +11,7 @@ import json
 import pytest
 
 from app.db.models.ai import AIAnalysis
-from app.db.models.email import EmailAccount, Message
+from app.db.models.email import Attachment, EmailAccount, Message
 from app.services import analysis_service
 
 
@@ -158,3 +158,50 @@ def test_reroute_classified_messages_leaves_correctly_filed_mail_untouched(db_se
 
     assert moved == 0
     assert db_session.query(Message).filter(Message.id == message.id).one().folder == "案件"
+
+
+@pytest.mark.asyncio
+async def test_message_with_skill_sheet_attachment_is_routed_to_candidate_folder_even_when_the_llm_says_deal(db_session):
+    """A real user report: a mail with a skill-sheet spreadsheet attached
+    landed in 案件 because the model's category scores came back tied
+    (案件紹介/人材紹介/日程調整/請求/広告 all at 55%). "基本的にスキルシート
+    が添付...されているものは案件ではなく人材です" — whether an attachment
+    is a skill sheet is already determined deterministically by
+    attachment_analysis_service, so routing must trust that signal over a
+    close/ambiguous category call."""
+    message = _make_message(db_session, subject="【直個人】PMO案件のご紹介", body_text="案件のご紹介です。")
+    db_session.add(Attachment(message_id=message.id, file_name="スキルシート.xlsx", classified_kind="skill_sheet"))
+    db_session.commit()
+
+    await analysis_service.analyze_message(db_session, message, force=True)
+
+    assert db_session.query(Message).filter(Message.id == message.id).one().folder == "人材"
+
+
+def test_reroute_classified_messages_fixes_skill_sheet_mail_already_stuck_in_deal_folder(db_session):
+    message = _make_message(db_session, subject="【直個人】PMO案件のご紹介", body_text="案件のご紹介です。", folder="案件")
+    db_session.add(Attachment(message_id=message.id, file_name="スキルシート.xlsx", classified_kind="skill_sheet"))
+    db_session.add(
+        AIAnalysis(
+            message_id=message.id,
+            content_hash="irrelevant",
+            provider_used="local_mock",
+            classification_json=json.dumps(
+                {
+                    "mail_type": "案件紹介",
+                    "categories": [
+                        {"label": "案件紹介", "confidence": 0.55},
+                        {"label": "人材紹介", "confidence": 0.55},
+                    ],
+                    "reply_required": False,
+                }
+            ),
+            extraction_json="{}",
+        )
+    )
+    db_session.commit()
+
+    moved = analysis_service.reroute_classified_messages(db_session)
+
+    assert moved == 1
+    assert db_session.query(Message).filter(Message.id == message.id).one().folder == "人材"

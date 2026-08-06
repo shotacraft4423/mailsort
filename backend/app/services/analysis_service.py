@@ -210,6 +210,16 @@ _CATEGORY_FOLDER_MAP = {
 # or a custom folder a rule or the user filed it into) is left alone.
 _AUTO_ROUTABLE_FOLDERS = {"INBOX", "要返信", *_CATEGORY_FOLDER_MAP.values()}
 
+# "基本的にスキルシートが添付、もしくは人間のスキルが本文に書いてあるものは
+# 案件ではなく人材です" — a real user-reported misroute (a message with a
+# skill-sheet spreadsheet attachment landed in 案件 because the model's
+# category scores came back tied). Whether an attachment is a skill sheet /
+# resume is something attachment_analysis_service already determines
+# deterministically (keyword match against the file name/content, see
+# AttachmentKind), so this is a zero-token, zero-ambiguity override rather
+# than something worth re-asking the LLM about on every re-classify.
+_CANDIDATE_ATTACHMENT_KINDS = {"skill_sheet", "resume"}
+
 
 def _apply_post_analysis_side_effects(
     db: Session,
@@ -263,6 +273,8 @@ def _route_to_category_folder(db: Session, message: Message, classification: Cla
         return
 
     target = _CATEGORY_FOLDER_MAP.get(classification.top_category())
+    if any(a.classified_kind in _CANDIDATE_ATTACHMENT_KINDS for a in message.attachments):
+        target = "人材"
     if target is None and classification.reply_required:
         target = "要返信"
     if target and target != message.folder:

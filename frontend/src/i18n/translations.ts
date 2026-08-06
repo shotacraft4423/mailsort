@@ -185,7 +185,10 @@ export const translations = {
     "admin.rulePrefillName": "「{folder}」への振り分け",
     "admin.promptsHelp":
       "分類・抽出タスクは、下の「タスク」欄でこのタスクに使うテンプレートを有効化すると、バックエンドの既定プロンプトの代わりに使用されます。" +
-      "まずは既存のテンプレートを開いて内容を確認し、必要な部分だけ書き換えるのがおすすめです。",
+      "まずは既存のテンプレートを開いて内容を確認し、必要な部分だけ書き換えるのがおすすめです。" +
+      "「案件紹介と人材紹介の見分け方」「どんなメールを返信必須(要返信)とみなすか」といった分類の基準も、" +
+      "「分類」タスクのシステムプロンプトに具体的なルールとして書き足すことで調整できます" +
+      "（「既定のプロンプトを入力」で今の標準ルールを確認できます）。",
     "admin.addVersion": "新バージョン追加",
     "admin.deleteTemplate": "削除",
     "admin.fillFromDefault": "既定のプロンプトを入力",
@@ -239,6 +242,8 @@ export const translations = {
     "ai.levelDetailed": "詳細",
     "ai.noSummaryYet": "まだ要約が生成されていません",
     "ai.summarizeFailed": "要約の生成に失敗しました。設定タブでAPIキー/プロバイダーを確認してください。",
+    "ai.fallbackBadge": "⚠ この分類はオフライン簡易ルールによるものです（実際のAIではありません）",
+    "ai.fallbackHelp": "AIプロバイダーへの接続に失敗した、またはAPIキーが未設定のため、キーワード一致による簡易分類にフォールバックしました。設定タブでAPIキー・プロバイダーを確認し、再分類してください。",
     "ai.categoryWrong": "この分類は違います",
     "ai.orCustomInput": "または自由入力",
     "ai.confirmCorrection": "この分類に修正する",
@@ -487,7 +492,10 @@ export const translations = {
     "admin.rulePrefillName": "Route to \"{folder}\"",
     "admin.promptsHelp":
       "For classification/extraction tasks, activating a template for that task below replaces the backend's built-in default prompt. " +
-      "It's easiest to open an existing template first and only edit the parts you need.",
+      "It's easiest to open an existing template first and only edit the parts you need. " +
+      "Judgment calls like \"how to tell a deal-introduction mail from a candidate-introduction mail\" or " +
+      '"what counts as needing a reply" can be tuned by adding explicit rules to the classification task\'s system prompt ' +
+      '(use "Fill with default prompt" to see the current baseline rules).',
     "admin.addVersion": "Add new version",
     "admin.deleteTemplate": "Delete",
     "admin.fillFromDefault": "Fill with default prompt",
@@ -539,6 +547,8 @@ export const translations = {
     "ai.levelDetailed": "Detailed",
     "ai.noSummaryYet": "No summary generated yet",
     "ai.summarizeFailed": "Failed to generate a summary. Check the API key/provider under Settings.",
+    "ai.fallbackBadge": "⚠ This classification came from the offline keyword fallback, not real AI",
+    "ai.fallbackHelp": "The configured AI provider failed or no API key is set, so this fell back to keyword-based classification. Check the API key/provider under Settings, then re-classify.",
     "ai.categoryWrong": "This category is wrong",
     "ai.orCustomInput": "or enter your own",
     "ai.confirmCorrection": "Correct to this category",

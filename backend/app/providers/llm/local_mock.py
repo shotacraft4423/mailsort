@@ -14,15 +14,25 @@ from __future__ import annotations
 
 from app.providers.llm.base import LLMProvider, LLMResponse
 
-_KEYWORD_RULES: list[tuple[str, list[str]]] = [
-    ("案件紹介", ["案件のご紹介", "案件情報", "募集案件", "案件をご紹介"]),
-    ("人材紹介", ["人材のご紹介", "エンジニアのご紹介", "要員のご紹介", "スキルシート"]),
-    ("日程調整", ["日程調整", "打ち合わせ", "面談日程", "候補日"]),
-    ("契約", ["契約書", "発注書", "基本契約", "ご契約"]),
-    ("請求", ["請求書", "ご請求", "お振込み", "支払い"]),
-    ("障害通知", ["障害", "メンテナンス", "サービス停止"]),
-    ("広告", ["メルマガ", "配信停止", "セミナーのご案内"]),
-    ("迷惑メール", ["当選しました", "至急ご確認", "副業で稼ぐ"]),
+_KEYWORD_RULES: list[tuple[str, float, list[str]]] = [
+    # 人材紹介 gets a higher base confidence than 案件紹介: a real user
+    # report showed a skill-sheet-attached mail landing in 案件 because
+    # both categories matched with the same flat confidence and
+    # top_category() (max-by-confidence) fell back to whichever came first
+    # in this list. "スキルシートが添付、もしくは人間のスキルが本文に書い
+    # てあるものは案件ではなく人材" — these keywords (plus the attachment
+    # excerpt text build_context() appends, which includes the file's own
+    # 経歴書/職務経歴 wording) are a stronger, more specific signal than a
+    # generic "案件のご紹介" phrase, which can appear in candidate-related
+    # mail too (e.g. a reply quoting "ご案件をご紹介いただき...").
+    ("人材紹介", 0.8, ["人材のご紹介", "エンジニアのご紹介", "要員のご紹介", "スキルシート", "経歴書", "職務経歴"]),
+    ("案件紹介", 0.65, ["案件のご紹介", "案件情報", "募集案件", "案件をご紹介"]),
+    ("日程調整", 0.6, ["日程調整", "打ち合わせ", "面談日程", "候補日"]),
+    ("契約", 0.6, ["契約書", "発注書", "基本契約", "ご契約"]),
+    ("請求", 0.6, ["請求書", "ご請求", "お振込み", "支払い"]),
+    ("障害通知", 0.6, ["障害", "メンテナンス", "サービス停止"]),
+    ("広告", 0.55, ["メルマガ", "配信停止", "セミナーのご案内"]),
+    ("迷惑メール", 0.55, ["当選しました", "至急ご確認", "副業で稼ぐ"]),
 ]
 
 _REPLY_HINTS = ["ご返信", "お返事", "ご回答ください", "至急", "至急ご確認"]
@@ -60,14 +70,21 @@ class LocalMockProvider(LLMProvider):
         )
 
     def _classification_stub(self, text: str) -> dict:
-        matched = [label for label, keywords in _KEYWORD_RULES if any(k in text for k in keywords)]
-        if not matched:
-            matched = ["その他"]
+        scored = [(label, confidence) for label, confidence, keywords in _KEYWORD_RULES if any(k in text for k in keywords)]
+        if not scored:
+            scored = [("その他", 0.5)]
+        matched = [label for label, _confidence in scored]
+        # max() ties break on first-seen, so mail_type used to always land
+        # on whichever category happened to be declared first in
+        # _KEYWORD_RULES whenever two categories matched — picking by each
+        # rule's own confidence instead means the more specific signal
+        # (e.g. 人材紹介's スキルシート) actually wins.
+        top_label = max(scored, key=lambda pair: pair[1])[0]
         reply_required = any(hint in text for hint in _REPLY_HINTS)
 
         return {
-            "mail_type": matched[0],
-            "categories": [{"label": label, "confidence": 0.55} for label in matched],
+            "mail_type": top_label,
+            "categories": [{"label": label, "confidence": confidence} for label, confidence in scored],
             "priority": "high" if reply_required else "normal",
             "reply_required": reply_required,
             "reply_deadline": None,

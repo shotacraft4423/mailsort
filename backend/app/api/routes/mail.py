@@ -56,6 +56,8 @@ class MessageDetailOut(MessageOut):
     extraction: dict | None = None
     summary_3line: str | None = None
     attachments: list[AttachmentOut] = []
+    is_fallback: bool = False
+    provider_used: str | None = None
 
 
 class DraftCreate(BaseModel):
@@ -139,6 +141,8 @@ def get_message(message_id: str, db: Session = Depends(get_db)) -> MessageDetail
         extraction=json.loads(analysis.extraction_json) if analysis and analysis.extraction_json else None,
         summary_3line=analysis.summary_3line if analysis else None,
         attachments=[AttachmentOut.model_validate(a) for a in message.attachments],
+        is_fallback=analysis.is_fallback if analysis else False,
+        provider_used=analysis.provider_used if analysis else None,
     )
 
 

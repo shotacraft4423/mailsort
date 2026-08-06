@@ -101,6 +101,12 @@ function SummaryTab({ message }: { message: MessageDetail }) {
       <p className="summary-text">{loading ? t("common.generating") : summary || t("ai.noSummaryYet")}</p>
       {error && <p className="reply-status">{error}</p>}
 
+      {message.is_fallback && (
+        <p className="ai-fallback-warning" title={t("ai.fallbackHelp")}>
+          {t("ai.fallbackBadge")}
+        </p>
+      )}
+
       {displayCategories.length > 0 && (
         <div className="category-tags">
           {displayCategories.map((c) => (

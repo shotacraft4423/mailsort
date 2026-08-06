@@ -62,6 +62,8 @@ export interface MessageDetail extends MessageSummary {
   extraction: Record<string, unknown> | null;
   summary_3line: string | null;
   attachments: AttachmentInfo[];
+  is_fallback: boolean;
+  provider_used: string | null;
 }
 
 export interface DashboardData {

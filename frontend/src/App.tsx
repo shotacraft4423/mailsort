@@ -268,81 +268,85 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <span className="app-title">MailSort</span>
-        <nav className="view-nav">
-          <button className={view === "mail" ? "active" : ""} onClick={() => setView("mail")}>
-            {t("nav.mail")}
-          </button>
-          <button className={view === "dashboard" ? "active" : ""} onClick={() => setView("dashboard")}>
-            {t("nav.dashboard")}
-          </button>
-          <button className={view === "meetings" ? "active" : ""} onClick={() => setView("meetings")}>
-            {t("nav.meetings")}
-          </button>
-          <button className={view === "contacts" ? "active" : ""} onClick={() => setView("contacts")}>
-            {t("nav.contacts")}
-          </button>
-          <button className={view === "admin" ? "active" : ""} onClick={() => setView("admin")}>
-            {t("nav.admin")}
-          </button>
-          <button className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}>
-            {t("nav.settings")}
-          </button>
-        </nav>
-        {view === "mail" && (
-          <form
-            className="search-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              runSearch();
-            }}
-          >
-            <input
-              placeholder={t("search.placeholder")}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            <button type="submit" disabled={searching}>
-              {searching ? t("common.searching") : t("search.submit")}
+        <div className="app-header-row app-header-primary">
+          <span className="app-title">MailSort</span>
+          <nav className="view-nav">
+            <button className={view === "mail" ? "active" : ""} onClick={() => setView("mail")}>
+              {t("nav.mail")}
             </button>
-            {searchResults && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchQuery("");
-                  setSearchResults(null);
-                }}
-              >
-                {t("search.clear")}
+            <button className={view === "dashboard" ? "active" : ""} onClick={() => setView("dashboard")}>
+              {t("nav.dashboard")}
+            </button>
+            <button className={view === "meetings" ? "active" : ""} onClick={() => setView("meetings")}>
+              {t("nav.meetings")}
+            </button>
+            <button className={view === "contacts" ? "active" : ""} onClick={() => setView("contacts")}>
+              {t("nav.contacts")}
+            </button>
+            <button className={view === "admin" ? "active" : ""} onClick={() => setView("admin")}>
+              {t("nav.admin")}
+            </button>
+            <button className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}>
+              {t("nav.settings")}
+            </button>
+          </nav>
+          {backendError && <span className="backend-warning">{backendError}</span>}
+          <button className="theme-toggle" onClick={() => setDark((d) => !d)} aria-label={t("theme.toggleAria")}>
+            {dark ? t("theme.light") : t("theme.dark")}
+          </button>
+        </div>
+
+        {view === "mail" && (
+          <div className="app-header-row app-header-toolbar">
+            <form
+              className="search-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                runSearch();
+              }}
+            >
+              <input
+                placeholder={t("search.placeholder")}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <button type="submit" disabled={searching}>
+                {searching ? t("common.searching") : t("search.submit")}
               </button>
-            )}
-          </form>
+              {searchResults && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setSearchResults(null);
+                  }}
+                >
+                  {t("search.clear")}
+                </button>
+              )}
+            </form>
+
+            <span className="bulk-classify">
+              {!searchResults && (
+                <select value={bulkCount} onChange={(e) => setBulkCount(Number(e.target.value))} disabled={bulkRunning}>
+                  {[50, 100, 200].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <button type="button" onClick={runBulkClassify} disabled={bulkRunning}>
+                {bulkRunning ? t("bulkClassify.progress", { done: bulkProgress!.done, total: bulkProgress!.total }) : t("bulkClassify.button")}
+              </button>
+              {!bulkRunning && bulkResultMessage && <span className="bulk-classify-result">{bulkResultMessage}</span>}
+              <button type="button" onClick={runReroute} disabled={rerouting} title={t("reroute.help")}>
+                {rerouting ? t("reroute.running") : t("reroute.button")}
+              </button>
+              {!rerouting && rerouteResultMessage && <span className="bulk-classify-result">{rerouteResultMessage}</span>}
+            </span>
+          </div>
         )}
-        {view === "mail" && (
-          <span className="bulk-classify">
-            {!searchResults && (
-              <select value={bulkCount} onChange={(e) => setBulkCount(Number(e.target.value))} disabled={bulkRunning}>
-                {[50, 100, 200].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            )}
-            <button type="button" onClick={runBulkClassify} disabled={bulkRunning}>
-              {bulkRunning ? t("bulkClassify.progress", { done: bulkProgress!.done, total: bulkProgress!.total }) : t("bulkClassify.button")}
-            </button>
-            {!bulkRunning && bulkResultMessage && <span className="bulk-classify-result">{bulkResultMessage}</span>}
-            <button type="button" onClick={runReroute} disabled={rerouting} title={t("reroute.help")}>
-              {rerouting ? t("reroute.running") : t("reroute.button")}
-            </button>
-            {!rerouting && rerouteResultMessage && <span className="bulk-classify-result">{rerouteResultMessage}</span>}
-          </span>
-        )}
-        {backendError && <span className="backend-warning">{backendError}</span>}
-        <button className="theme-toggle" onClick={() => setDark((d) => !d)} aria-label={t("theme.toggleAria")}>
-          {dark ? t("theme.light") : t("theme.dark")}
-        </button>
       </header>
 
       {view === "dashboard" && <DashboardView onSelectMessage={openMessageInMail} />}
