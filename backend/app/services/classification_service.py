@@ -31,7 +31,7 @@ from app.db.models.email import Message
 from app.providers.llm.base import LLMProviderError
 from app.providers.llm.local_mock import LocalMockProvider
 from app.providers.llm.registry import get_llm_provider
-from app.schemas.classification import ClassificationResult
+from app.schemas.classification import CategoryTag, ClassificationResult, ReplyCandidate
 from app.services.feedback_service import build_few_shot_suffix, get_similar_corrections
 from app.services.prompt_service import get_active_prompt, render_template, truncate_for_ai
 
@@ -122,6 +122,59 @@ _ENUM_VALUE_ALIASES: dict[str, str] = {
 # sometimes omits or sends as null instead of an explicit true/false.
 _REQUIRED_BOOLEAN_FIELDS = ("reply_required", "meeting_related", "contract_related", "billing_related")
 
+# Round 3 of the same bug class: right keys, right (or coerced) enum
+# values, but categories came back as a flat list of strings —
+# ["案件紹介"] / ["SES", "エンジニア募集"] — instead of
+# [{"label": "...", "confidence": 0.8}], because "categories" reads to a
+# model like a plain tag list unless the example it's shown demonstrates
+# the nested shape (fixed in _required_json_key_instruction below too).
+# Rather than patch this one field and wait for the next structural
+# variant, this coerces *any* list[BaseModel]-typed field generically:
+# bare strings become {<primary field>: value, ...sensible defaults},
+# dicts with a plausible alternate key name (category/name/score/...) get
+# remapped, and a lone scalar sent instead of a list gets wrapped in one.
+# Already-well-formed input passes through untouched either way.
+_NESTED_LIST_FIELD_SPECS: dict[str, tuple[type, dict[str, object]]] = {
+    # field name -> (pydantic model, {key_aliases_and_defaults})
+    "categories": (CategoryTag, {"label": ("category", "name", "type"), "confidence": ("score", "probability", "value")}),
+    "reply_candidates": (ReplyCandidate, {"tone": ("style",), "draft": ("text", "content", "body")}),
+}
+_NESTED_LIST_DEFAULTS: dict[str, dict[str, object]] = {
+    "categories": {"confidence": 0.6},
+    "reply_candidates": {"draft": ""},
+}
+
+
+def _coerce_nested_list_field(field_name: str, value: object) -> object:
+    model_cls, key_aliases = _NESTED_LIST_FIELD_SPECS[field_name]
+    defaults = _NESTED_LIST_DEFAULTS.get(field_name, {})
+    primary_field = next(iter(model_cls.model_fields))
+
+    if isinstance(value, (str, dict)):
+        value = [value]
+    if not isinstance(value, list):
+        return value
+
+    coerced = []
+    for item in value:
+        if isinstance(item, str):
+            coerced.append({primary_field: item, **defaults})
+        elif isinstance(item, dict):
+            remapped = dict(item)
+            for canonical, aliases in key_aliases.items():
+                if canonical in remapped:
+                    continue
+                for alias in aliases:
+                    if alias in remapped:
+                        remapped[canonical] = remapped.pop(alias)
+                        break
+            for key, default_value in defaults.items():
+                remapped.setdefault(key, default_value)
+            coerced.append(remapped)
+        else:
+            coerced.append(item)
+    return coerced
+
 
 def normalize_classification_payload(raw: dict) -> dict:
     if not isinstance(raw, dict):
@@ -138,6 +191,10 @@ def normalize_classification_payload(raw: dict) -> dict:
             mapped = _ENUM_VALUE_ALIASES.get(value)
             if mapped in allowed:
                 normalized[field_name] = mapped
+
+    for field_name in _NESTED_LIST_FIELD_SPECS:
+        if field_name in normalized:
+            normalized[field_name] = _coerce_nested_list_field(field_name, normalized[field_name])
 
     for field_name in _REQUIRED_BOOLEAN_FIELDS:
         if normalized.get(field_name) is None:
@@ -184,16 +241,23 @@ def build_context(message: Message, *, anonymize: bool) -> dict[str, str]:
 
 def _required_json_key_instruction() -> str:
     """Round 1 of this bug (key names translated to Japanese, e.g.
-    「案件か人材か」 instead of mail_type) got fixed by listing field names —
-    but the very next real run hit round 2: right key names, wrong *values*
-    — priority="低" instead of "low", temperature="冷たい" instead of
-    "cold", meeting_related=null instead of false/true. Naming the keys
-    was necessary but not sufficient; the model also needs to see the
-    literal allowed values and a concretely-typed example, not a prose
-    description of "what to determine". Both the example and the enum
-    lists are generated from ClassificationResult itself so neither can
-    drift out of sync with the schema."""
-    example = ClassificationResult(mail_type="（実際の分類名。以下は例です）").model_dump()
+    「案件か人材か」 instead of mail_type) got fixed by listing field names.
+    Round 2 was right key names, wrong *values* — priority="低" instead of
+    "low", temperature="冷たい" instead of "cold". Round 3 was right keys
+    and values but the wrong *shape* for categories — ["案件紹介"] instead
+    of [{"label": "案件紹介", "confidence": 0.8}] — because an empty-list
+    example (the previous version of this function always built the
+    example with no categories set) never actually showed what one entry
+    looks like. The example below now includes one populated entry for
+    every list[object] field, and normalize_classification_payload is the
+    deterministic backstop for whatever the next drift turns out to be —
+    this function's job is to make that next round less likely, not to be
+    the only line of defense."""
+    example = ClassificationResult(
+        mail_type="（実際の分類名。以下は例です）",
+        categories=[CategoryTag(label="案件紹介", confidence=0.8)],
+        reply_candidates=[ReplyCandidate(tone="丁寧", draft="（返信文の例）")],
+    ).model_dump()
     schema = ClassificationResult.model_json_schema()
     enum_lines = "\n".join(
         f"- {name}: {' / '.join(prop['enum'])} のいずれか（日本語や他の表現に言い換えないこと）"
@@ -206,9 +270,11 @@ def _required_json_key_instruction() -> str:
         f"使うキー名: {', '.join(ClassificationResult.model_fields.keys())}\n"
         "mail_type は必須項目です。既存のカテゴリに当てはまらない場合も、"
         "最も近いカテゴリ名（または「その他」）を必ず文字列で設定してください。\n"
+        "categories と reply_candidates は文字列の配列ではなく、"
+        "必ず下記の例のようにオブジェクトの配列にしてください。\n"
         "真偽値のフィールド（meeting_related等）は必ず true か false にしてください（nullにしない）。\n"
         f"以下の項目は必ず指定された値のいずれかにしてください:\n{enum_lines}\n"
-        "出力フォーマットの例（キー名と型のみ参考にしてください。値は実際の内容に置き換えます）:\n"
+        "出力フォーマットの例（キー名・型・ネスト構造のみ参考にしてください。値は実際の内容に置き換えます）:\n"
         f"{json.dumps(example, ensure_ascii=False)}"
     )
 
