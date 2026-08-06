@@ -28,6 +28,9 @@ export default function App() {
   const [searching, setSearching] = useState(false);
   const [classifying, setClassifying] = useState(false);
   const [classifyError, setClassifyError] = useState<string | null>(null);
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number; failed: number } | null>(null);
+  const [bulkResultMessage, setBulkResultMessage] = useState<string | null>(null);
+  const bulkRunning = bulkProgress !== null && bulkProgress.done < bulkProgress.total;
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
@@ -145,6 +148,28 @@ export default function App() {
       received_at: null,
     })) ?? messages;
 
+  const runBulkClassify = async () => {
+    const targets = displayedMessages;
+    if (targets.length === 0 || bulkRunning) return;
+    setBulkResultMessage(null);
+    let done = 0;
+    let failed = 0;
+    setBulkProgress({ done, total: targets.length, failed });
+    for (const m of targets) {
+      try {
+        await api.analyze(m.id);
+      } catch {
+        failed += 1;
+      }
+      done += 1;
+      setBulkProgress({ done, total: targets.length, failed });
+    }
+    setBulkResultMessage(
+      failed > 0 ? t("bulkClassify.done", { done, failed }) : t("bulkClassify.allSucceeded", { done })
+    );
+    if (selectedId) api.getMessage(selectedId).then(setSelectedMessage).catch(() => {});
+  };
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -194,6 +219,14 @@ export default function App() {
               </button>
             )}
           </form>
+        )}
+        {view === "mail" && (
+          <span className="bulk-classify">
+            <button type="button" onClick={runBulkClassify} disabled={bulkRunning || displayedMessages.length === 0}>
+              {bulkRunning ? t("bulkClassify.progress", { done: bulkProgress!.done, total: bulkProgress!.total }) : t("bulkClassify.button")}
+            </button>
+            {!bulkRunning && bulkResultMessage && <span className="bulk-classify-result">{bulkResultMessage}</span>}
+          </span>
         )}
         {backendError && <span className="backend-warning">{backendError}</span>}
         <button className="theme-toggle" onClick={() => setDark((d) => !d)} aria-label={t("theme.toggleAria")}>

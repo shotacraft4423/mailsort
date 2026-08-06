@@ -5,12 +5,22 @@ row. This is the module that implements the non-functional requirement
 is caught and we retry once against LocalMockProvider, tagging the result
 `is_fallback=True` so the UI can show "オフライン分類" instead of pretending
 it's a full AI result.
+
+A real provider returning syntactically valid JSON that doesn't match
+ClassificationResult's shape (missing required `mail_type`, wrong type for
+a field, etc. — response_format=json_object only guarantees valid JSON,
+not a matching schema) is just as much a "the AI didn't give us something
+usable" case as a network error, so pydantic's ValidationError is caught
+alongside LLMProviderError and triggers the same offline fallback instead
+of bubbling up as an unhandled 500 (which is what "AI分類に失敗しました"
+in the UI used to mean before this fix).
 """
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
 
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -110,12 +120,12 @@ async def classify_message(db: Session, message: Message, *, force: bool = False
 
     try:
         raw, _usage = await provider.complete_json(system_prompt=system_prompt, user_prompt=user_prompt)
-    except LLMProviderError:
+        result = ClassificationResult.model_validate(raw)
+    except (LLMProviderError, ValidationError):
         provider = LocalMockProvider()
         is_fallback = True
         raw, _usage = await provider.complete_json(system_prompt=system_prompt, user_prompt=user_prompt)
-
-    result = ClassificationResult.model_validate(raw)
+        result = ClassificationResult.model_validate(raw)
 
     if existing:
         analysis = existing

@@ -1,16 +1,20 @@
 """Runs the "AI抽出" task, populating AIAnalysis.extraction_json. Shares the
 same cache-by-content-hash / offline-fallback pattern as
-classification_service.py (see that module's docstring for the rationale).
+classification_service.py (see that module's docstring for why pydantic's
+ValidationError — a real provider's JSON not matching ExtractionResult's
+field types — is caught alongside LLMProviderError instead of crashing the
+request).
 """
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
 
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.security import mask_text
+from app.core.security import content_hash, mask_text
 from app.db.models.ai import AIAnalysis
 from app.db.models.email import Message
 from app.providers.llm.base import LLMProviderError
@@ -54,14 +58,27 @@ async def extract_message(db: Session, message: Message) -> ExtractionOutcome:
     is_fallback = False
     try:
         raw, _usage = await provider.complete_json(system_prompt=system_prompt, user_prompt=user_prompt)
-    except LLMProviderError:
-        raw, is_fallback = {}, True  # local mock has no dedicated extraction logic; empty result is safe default
-
-    result = ExtractionResult.model_validate(raw)
+        result = ExtractionResult.model_validate(raw)
+    except (LLMProviderError, ValidationError):
+        # local mock has no dedicated extraction logic; empty result is a
+        # safe default whether the provider failed outright or just
+        # returned JSON that doesn't match ExtractionResult's shape.
+        is_fallback = True
+        result = ExtractionResult.model_validate({})
 
     analysis = db.query(AIAnalysis).filter(AIAnalysis.message_id == message.id).one_or_none()
     if analysis is None:
-        analysis = AIAnalysis(message_id=message.id, provider_used=provider.name)
+        # content_hash is NOT NULL on AIAnalysis; this used to be left
+        # unset here (extract_message is the only one of the three AI
+        # services that creates AIAnalysis rows) and crashed with a
+        # sqlite IntegrityError the moment this ran for a message with no
+        # prior classify/analyze call.
+        hash_input = content_hash(
+            message.subject,
+            message.body_text,
+            ",".join(sorted(a.file_name for a in message.attachments)),
+        )
+        analysis = AIAnalysis(message_id=message.id, provider_used=provider.name, content_hash=hash_input)
         db.add(analysis)
     analysis.extraction_json = json.dumps(result.model_dump(), ensure_ascii=False)
     db.commit()

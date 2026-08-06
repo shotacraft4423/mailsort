@@ -34,6 +34,11 @@ export const translations = {
     "search.submit": "検索",
     "search.clear": "クリア",
 
+    "bulkClassify.button": "表示中のメールを一括分類",
+    "bulkClassify.progress": "AI分類中… ({done}/{total})",
+    "bulkClassify.done": "{done}件中{failed}件失敗しました。",
+    "bulkClassify.allSucceeded": "{done}件すべて分類しました。",
+
     "theme.toggleAria": "ダークモード切替",
     "theme.light": "☀ ライト",
     "theme.dark": "🌙 ダーク",
@@ -287,6 +292,11 @@ export const translations = {
     "search.placeholder": "Search mail…",
     "search.submit": "Search",
     "search.clear": "Clear",
+
+    "bulkClassify.button": "Classify visible messages",
+    "bulkClassify.progress": "Classifying… ({done}/{total})",
+    "bulkClassify.done": "{failed} of {done} failed.",
+    "bulkClassify.allSucceeded": "Classified all {done} message(s).",
 
     "theme.toggleAria": "Toggle dark mode",
     "theme.light": "☀ Light",

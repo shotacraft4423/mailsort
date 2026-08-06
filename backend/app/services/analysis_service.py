@@ -13,6 +13,15 @@ Manual, single-purpose re-runs (the UI's per-task buttons, or testing one
 prompt in isolation via the prompt editor) still go through
 classification_service.classify_message / extraction_service.extract_message
 individually — this module builds on top of them rather than replacing them.
+
+Real-provider robustness: response_format=json_object only guarantees
+syntactically valid JSON, not that it nests into the exact
+{"classification": {...}, "extraction": {...}} shape this module asks for.
+A real model omitting a required field (ClassificationResult.mail_type) or
+using a wrong type raises pydantic's ValidationError, which is caught
+alongside LLMProviderError and falls back to LocalMockProvider the same
+way a network failure does — otherwise it surfaced as an unhandled 500
+("AI分類に失敗しました" with zero explanation of why).
 """
 from __future__ import annotations
 
@@ -20,6 +29,7 @@ import asyncio
 import json
 from dataclasses import dataclass
 
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -106,13 +116,14 @@ async def analyze_message(db: Session, message: Message, *, force: bool = False)
     is_fallback = False
     try:
         raw, _usage = await provider.complete_json(system_prompt=system_prompt, user_prompt=user_prompt)
-    except LLMProviderError:
+        classification = ClassificationResult.model_validate(raw.get("classification") or {})
+        extraction = ExtractionResult.model_validate(raw.get("extraction") or {})
+    except (LLMProviderError, ValidationError):
         provider = LocalMockProvider()
         is_fallback = True
         raw, _usage = await provider.complete_json(system_prompt=system_prompt, user_prompt=user_prompt)
-
-    classification = ClassificationResult.model_validate(raw.get("classification") or {})
-    extraction = ExtractionResult.model_validate(raw.get("extraction") or {})
+        classification = ClassificationResult.model_validate(raw.get("classification") or {})
+        extraction = ExtractionResult.model_validate(raw.get("extraction") or {})
 
     if existing:
         analysis = existing
