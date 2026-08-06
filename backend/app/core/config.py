@@ -48,6 +48,13 @@ class Settings(BaseSettings):
     # via GET/PUT /settings so it's a per-install choice, not per-browser.
     ui_language: str = "ja"
 
+    # After classifying a message, move it out of INBOX into a matching
+    # local folder (案件/人材/重要/要返信/Junk) — see
+    # services/analysis_service.py's _route_to_category_folder. Only ever
+    # touches messages currently in INBOX; Sent/Drafts/Archive/Trash and
+    # anywhere the user has already filed something are left alone.
+    auto_route_by_classification: bool = True
+
     duplicate_similarity_threshold: float = 0.86
     # How many above-threshold candidates get an LLM verification call per
     # duplicate-check run. Embedding similarity is cheap (or free, with the

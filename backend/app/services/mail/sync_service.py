@@ -25,9 +25,19 @@ async def sync_account(db: Session, account: EmailAccount, *, folder: str = "INB
 
     created: list[Message] = []
     for item in fetched:
+        # Dedup key is (account, uid) only — NOT folder. Message.folder is
+        # mutated locally after import (Archive/Trash actions, and now
+        # classification-based auto-routing to 案件/人材/等), so keying the
+        # "have we already imported this" check on the *current* folder
+        # value meant re-syncing INBOX after archiving/routing a message
+        # made it look new again and re-imported it as a duplicate (with a
+        # fresh, redundant AI analysis on top). IMAP UIDs are technically
+        # only unique per-mailbox, not per-account, but this app only ever
+        # syncs the "INBOX" folder today, so that's not a real collision
+        # risk yet — revisit if a second synced folder is ever added.
         exists = (
             db.query(Message)
-            .filter(Message.account_id == account.id, Message.message_uid == item.uid, Message.folder == folder)
+            .filter(Message.account_id == account.id, Message.message_uid == item.uid)
             .one_or_none()
         )
         if exists:

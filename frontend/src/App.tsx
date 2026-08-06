@@ -37,6 +37,7 @@ export default function App() {
   // instead of unconditionally clearing the selection, which is what it
   // does for a normal user-initiated folder switch.
   const [pendingSelectId, setPendingSelectId] = useState<string | null>(null);
+  const [bulkCount, setBulkCount] = useState(50);
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
@@ -182,8 +183,20 @@ export default function App() {
     })) ?? messages;
 
   const runBulkClassify = async () => {
-    const targets = displayedMessages;
-    if (targets.length === 0 || bulkRunning) return;
+    if (bulkRunning) return;
+    // A search is active: classify exactly what's shown (no count control
+    // for search results). Otherwise fetch up to `bulkCount` messages from
+    // the current folder directly, independent of the list's own (fixed)
+    // page size, so picking 200 actually classifies 200.
+    let targets = displayedMessages;
+    if (!searchResults) {
+      try {
+        targets = await api.listMessages(folder, bulkCount);
+      } catch {
+        targets = displayedMessages;
+      }
+    }
+    if (targets.length === 0) return;
     setBulkResultMessage(null);
     let done = 0;
     let failed = 0;
@@ -255,7 +268,16 @@ export default function App() {
         )}
         {view === "mail" && (
           <span className="bulk-classify">
-            <button type="button" onClick={runBulkClassify} disabled={bulkRunning || displayedMessages.length === 0}>
+            {!searchResults && (
+              <select value={bulkCount} onChange={(e) => setBulkCount(Number(e.target.value))} disabled={bulkRunning}>
+                {[50, 100, 200].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            )}
+            <button type="button" onClick={runBulkClassify} disabled={bulkRunning}>
               {bulkRunning ? t("bulkClassify.progress", { done: bulkProgress!.done, total: bulkProgress!.total }) : t("bulkClassify.button")}
             </button>
             {!bulkRunning && bulkResultMessage && <span className="bulk-classify-result">{bulkResultMessage}</span>}

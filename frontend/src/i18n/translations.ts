@@ -123,6 +123,7 @@ export const translations = {
 
     "settings.accountsHeading": "メールアカウント",
     "settings.syncNow": "今すぐ受信",
+    "settings.syncLimitLabel": "1回の受信で取得する件数",
     "settings.syncing": "受信中…",
     "settings.syncResult": "{count}件の新着メールを取得しました。",
     "settings.syncFailed": "受信に失敗しました。",
@@ -145,6 +146,7 @@ export const translations = {
     "settings.baseUrlLabel": "OpenAI互換 base_url",
     "settings.modelLabel": "OpenAI互換モデル",
     "settings.anonymizeLabel": "APIキー送信前に匿名化する",
+    "settings.autoRouteLabel": "分類結果に応じて自動でフォルダ振り分け（案件/人材/重要/要返信/Junk）",
     "settings.configured": "設定済み",
     "settings.notConfigured": "未設定",
     "settings.openaiKeyLabel": "OpenAI APIキー（{status}）",
@@ -387,6 +389,7 @@ export const translations = {
 
     "settings.accountsHeading": "Mail accounts",
     "settings.syncNow": "Sync now",
+    "settings.syncLimitLabel": "Messages to fetch per sync",
     "settings.syncing": "Syncing…",
     "settings.syncResult": "Fetched {count} new message(s).",
     "settings.syncFailed": "Sync failed.",
@@ -409,6 +412,7 @@ export const translations = {
     "settings.baseUrlLabel": "OpenAI-compatible base_url",
     "settings.modelLabel": "OpenAI-compatible model",
     "settings.anonymizeLabel": "Anonymize before sending to the API",
+    "settings.autoRouteLabel": "Auto-route by classification (案件/人材/重要/要返信/Junk)",
     "settings.configured": "configured",
     "settings.notConfigured": "not set",
     "settings.openaiKeyLabel": "OpenAI API key ({status})",

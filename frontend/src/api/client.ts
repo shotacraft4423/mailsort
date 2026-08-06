@@ -115,6 +115,7 @@ export interface SettingsData {
   anonymize_before_send: boolean;
   duplicate_similarity_threshold: number;
   ui_language: string;
+  auto_route_by_classification: boolean;
   available_llm_providers: string[];
   has_openai_compatible_key: boolean;
   has_anthropic_key: boolean;
@@ -130,6 +131,7 @@ export interface SettingsUpdateInput {
   anonymize_before_send?: boolean;
   duplicate_similarity_threshold?: number;
   ui_language?: string;
+  auto_route_by_classification?: boolean;
   openai_compatible_api_key?: string;
   anthropic_api_key?: string;
 }
@@ -324,7 +326,8 @@ export interface PluginInfo {
 }
 
 export const api = {
-  listMessages: (folder = "INBOX") => request<MessageSummary[]>(`/mail?folder=${encodeURIComponent(folder)}`),
+  listMessages: (folder = "INBOX", limit?: number) =>
+    request<MessageSummary[]>(`/mail?folder=${encodeURIComponent(folder)}${limit ? `&limit=${limit}` : ""}`),
   getMessage: (id: string) => request<MessageDetail>(`/mail/${id}`),
   getRelated: (id: string) => request<RelatedData>(`/mail/${id}/related`),
   getAuditLog: (id: string) => request<AuditLogEntry[]>(`/mail/${id}/audit-log`),
@@ -332,10 +335,11 @@ export const api = {
     request<MessageSummary>(`/mail/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
   registerBusinessCard: (attachmentId: string) =>
     request<BusinessCardContact>(`/mail/attachments/${attachmentId}/register-business-card`, { method: "POST" }),
-  syncAccount: (accountId: string, folder = "INBOX") =>
-    request<MessageSummary[]>(`/mail/accounts/${accountId}/sync?folder=${encodeURIComponent(folder)}`, {
-      method: "POST",
-    }),
+  syncAccount: (accountId: string, folder = "INBOX", limit?: number) =>
+    request<MessageSummary[]>(
+      `/mail/accounts/${accountId}/sync?folder=${encodeURIComponent(folder)}${limit ? `&limit=${limit}` : ""}`,
+      { method: "POST" }
+    ),
   saveDraft: (input: { account_id: string; to: string[]; cc?: string[]; subject: string; body_text: string }) =>
     request<MessageSummary>(`/mail/draft`, { method: "POST", body: JSON.stringify(input) }),
   updateDraft: (

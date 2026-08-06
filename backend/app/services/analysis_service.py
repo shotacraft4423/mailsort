@@ -32,7 +32,7 @@ from dataclasses import dataclass
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.core.security import content_hash
 from app.db.models.ai import AIAnalysis, AuditLogEntry
 from app.db.models.email import Message
@@ -155,12 +155,45 @@ async def analyze_message(db: Session, message: Message, *, force: bool = False)
     db.commit()
 
     _extract_meetings_once(db, message, extraction)
+    _route_to_category_folder(db, message, classification, settings)
 
     await _run_rules_and_plugins(db, message, analysis, classification)
 
     return AnalysisOutcome(
         analysis=analysis, classification=classification, extraction=extraction, from_cache=False, is_fallback=is_fallback
     )
+
+
+# Only categories with an obvious, low-risk destination — leaves "その他"/
+# unclassified/unmapped categories in INBOX rather than guessing. "案件"/
+# "人材"/"重要"/"要返信"/"Junk" match FolderList's DEFAULT_FOLDERS on the
+# frontend so a routed message is always visible in the sidebar even for
+# an account whose real IMAP mailbox has none of these folders.
+_CATEGORY_FOLDER_MAP = {
+    "案件紹介": "案件",
+    "案件返信": "案件",
+    "人材紹介": "人材",
+    "人材返信": "人材",
+    "重要": "重要",
+    "迷惑メール": "Junk",
+}
+
+
+def _route_to_category_folder(db: Session, message: Message, classification: ClassificationResult, settings: Settings) -> None:
+    """"せっかく分類したんだからその分類ごとにフォルダへの振り分けが欲しい" —
+    classification previously only ever produced tags/badges the user had
+    to go looking for; nothing moved the message anywhere. Only touches
+    messages still sitting in INBOX so it never yanks something out of a
+    folder the user (or a rule) already filed it into on purpose."""
+    if not settings.auto_route_by_classification or message.folder != "INBOX":
+        return
+
+    target = _CATEGORY_FOLDER_MAP.get(classification.top_category())
+    if target is None and classification.reply_required:
+        target = "要返信"
+    if target:
+        message.folder = target
+        db.commit()
 
 
 def _extract_meetings_once(db: Session, message: Message, extraction: ExtractionResult) -> None:

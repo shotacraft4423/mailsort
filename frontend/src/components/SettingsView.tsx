@@ -55,6 +55,7 @@ function AccountsSection() {
   });
   const [saving, setSaving] = useState(false);
   const [syncStatus, setSyncStatus] = useState<Record<string, string>>({});
+  const [syncLimit, setSyncLimit] = useState(50);
 
   const load = () => api.listAccounts().then(setAccounts).catch(() => setAccounts([]));
 
@@ -82,7 +83,7 @@ function AccountsSection() {
   const syncNow = async (id: string) => {
     setSyncStatus((prev) => ({ ...prev, [id]: t("settings.syncing") }));
     try {
-      const messages = await api.syncAccount(id, "INBOX");
+      const messages = await api.syncAccount(id, "INBOX", syncLimit);
       setSyncStatus((prev) => ({ ...prev, [id]: t("settings.syncResult", { count: messages.length }) }));
     } catch (err) {
       setSyncStatus((prev) => ({ ...prev, [id]: err instanceof Error ? err.message : t("settings.syncFailed") }));
@@ -92,6 +93,16 @@ function AccountsSection() {
   return (
     <section className="settings-section">
       <h3>{t("settings.accountsHeading")}</h3>
+      <label className="settings-row">
+        <span>{t("settings.syncLimitLabel")}</span>
+        <select value={syncLimit} onChange={(e) => setSyncLimit(Number(e.target.value))}>
+          {[50, 100, 200, 500].map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+        </select>
+      </label>
       <ul className="account-list">
         {accounts.map((a) => (
           <li key={a.id} className="account-list-row">
@@ -255,6 +266,16 @@ function AISettingsSection() {
           type="checkbox"
           checked={settings.anonymize_before_send}
           onChange={(e) => update({ anonymize_before_send: e.target.checked })}
+          disabled={saving}
+        />
+      </label>
+
+      <label className="settings-row">
+        <span>{t("settings.autoRouteLabel")}</span>
+        <input
+          type="checkbox"
+          checked={settings.auto_route_by_classification}
+          onChange={(e) => update({ auto_route_by_classification: e.target.checked })}
           disabled={saving}
         />
       </label>

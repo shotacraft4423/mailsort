@@ -31,6 +31,7 @@ ALL_FIELDS = {
     "anonymize_before_send": "MAILSORT_ANONYMIZE_BEFORE_SEND",
     "duplicate_similarity_threshold": "MAILSORT_DUPLICATE_SIMILARITY_THRESHOLD",
     "ui_language": "MAILSORT_UI_LANGUAGE",
+    "auto_route_by_classification": "MAILSORT_AUTO_ROUTE_BY_CLASSIFICATION",
     "openai_compatible_api_key": "MAILSORT_OPENAI_COMPATIBLE_API_KEY",
     "anthropic_api_key": "MAILSORT_ANTHROPIC_API_KEY",
 }
@@ -58,6 +59,7 @@ class SettingsOut(BaseModel):
     anonymize_before_send: bool
     duplicate_similarity_threshold: float
     ui_language: str
+    auto_route_by_classification: bool
     available_llm_providers: list[str]
     has_openai_compatible_key: bool
     has_anthropic_key: bool
@@ -73,6 +75,7 @@ class SettingsUpdate(BaseModel):
     anonymize_before_send: bool | None = None
     duplicate_similarity_threshold: float | None = None
     ui_language: str | None = None
+    auto_route_by_classification: bool | None = None
     openai_compatible_api_key: str | None = None
     anthropic_api_key: str | None = None
 
@@ -91,6 +94,7 @@ def read_settings() -> SettingsOut:
         anonymize_before_send=settings.anonymize_before_send,
         duplicate_similarity_threshold=settings.duplicate_similarity_threshold,
         ui_language=settings.ui_language,
+        auto_route_by_classification=settings.auto_route_by_classification,
         available_llm_providers=list_providers(),
         has_openai_compatible_key=bool(settings.openai_compatible_api_key),
         has_anthropic_key=bool(settings.anthropic_api_key),
