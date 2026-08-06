@@ -22,6 +22,7 @@ class MeetingOut(BaseModel):
     is_rescheduled: bool
     supersedes_meeting_id: str | None
     is_hidden: bool
+    source_message_id: str | None
 
     model_config = {"from_attributes": True}
 

@@ -46,6 +46,8 @@ export default function App() {
   // does for a normal user-initiated folder switch.
   const [pendingSelectId, setPendingSelectId] = useState<string | null>(null);
   const [bulkCount, setBulkCount] = useState(50);
+  const [rerouting, setRerouting] = useState(false);
+  const [rerouteResultMessage, setRerouteResultMessage] = useState<string | null>(null);
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
@@ -242,6 +244,27 @@ export default function App() {
     if (selectedId) api.getMessage(selectedId).then(setSelectedMessage).catch(() => {});
   };
 
+  // "すでに割り振られてしまったメールの再振り分けを行えるようにして" —
+  // unlike runBulkClassify above (which only ever reads whichever folder is
+  // currently open, so a message already misfiled elsewhere is never
+  // touched), this walks every already-classified message mailbox-wide
+  // straight from its cached classification. No LLM call, so it's cheap to
+  // offer as its own always-available button.
+  const runReroute = async () => {
+    if (rerouting) return;
+    setRerouting(true);
+    setRerouteResultMessage(null);
+    try {
+      const { moved } = await api.rerouteFolders();
+      setRerouteResultMessage(t("reroute.done", { moved }));
+      reloadMessages();
+    } catch {
+      setRerouteResultMessage(t("reroute.failed"));
+    } finally {
+      setRerouting(false);
+    }
+  };
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -310,6 +333,10 @@ export default function App() {
               {bulkRunning ? t("bulkClassify.progress", { done: bulkProgress!.done, total: bulkProgress!.total }) : t("bulkClassify.button")}
             </button>
             {!bulkRunning && bulkResultMessage && <span className="bulk-classify-result">{bulkResultMessage}</span>}
+            <button type="button" onClick={runReroute} disabled={rerouting} title={t("reroute.help")}>
+              {rerouting ? t("reroute.running") : t("reroute.button")}
+            </button>
+            {!rerouting && rerouteResultMessage && <span className="bulk-classify-result">{rerouteResultMessage}</span>}
           </span>
         )}
         {backendError && <span className="backend-warning">{backendError}</span>}
@@ -319,7 +346,7 @@ export default function App() {
       </header>
 
       {view === "dashboard" && <DashboardView onSelectMessage={openMessageInMail} />}
-      {view === "meetings" && <CalendarView />}
+      {view === "meetings" && <CalendarView onSelectMessage={openMessageInMail} />}
       {view === "contacts" && <ContactsView onSelectMessage={openMessageInMail} />}
       {view === "admin" && <AdminView />}
       {view === "settings" && <SettingsView />}

@@ -190,6 +190,7 @@ export interface MeetingSummary {
   is_rescheduled: boolean;
   supersedes_meeting_id: string | null;
   is_hidden: boolean;
+  source_message_id: string | null;
 }
 
 export interface MessageHit {
@@ -399,6 +400,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ corrected_mail_type: correctedMailType, note }),
     }),
+  rerouteFolders: () => request<{ moved: number }>("/ai/reroute-folders", { method: "POST" }),
+
   chat: (question: string) =>
     request<{ answer: string; source_message_ids: string[] }>(`/chat`, {
       method: "POST",

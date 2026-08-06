@@ -3,7 +3,11 @@ import type { MeetingSummary } from "../api/client";
 import { api } from "../api/client";
 import { useTranslation } from "../i18n/I18nContext";
 
-export function CalendarView() {
+interface Props {
+  onSelectMessage: (messageId: string) => void;
+}
+
+export function CalendarView({ onSelectMessage }: Props) {
   const { t } = useTranslation();
   const [meetings, setMeetings] = useState<MeetingSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +47,7 @@ export function CalendarView() {
       {upcoming.length === 0 ? (
         <p className="ai-empty">{t("calendar.noUpcoming")}</p>
       ) : (
-        <AgendaGroups meetings={upcoming} onToggleHidden={toggleHidden} />
+        <AgendaGroups meetings={upcoming} onToggleHidden={toggleHidden} onSelectMessage={onSelectMessage} />
       )}
 
       {undated.length > 0 && (
@@ -51,7 +55,7 @@ export function CalendarView() {
           <h3>{t("calendar.undated", { count: undated.length })}</h3>
           <ul className="agenda-list">
             {undated.map((m) => (
-              <MeetingRow key={m.id} meeting={m} onToggleHidden={toggleHidden} />
+              <MeetingRow key={m.id} meeting={m} onToggleHidden={toggleHidden} onSelectMessage={onSelectMessage} />
             ))}
           </ul>
         </>
@@ -61,7 +65,7 @@ export function CalendarView() {
       {past.length === 0 ? (
         <p className="ai-empty">{t("calendar.noPast")}</p>
       ) : (
-        <AgendaGroups meetings={past} onToggleHidden={toggleHidden} />
+        <AgendaGroups meetings={past} onToggleHidden={toggleHidden} onSelectMessage={onSelectMessage} />
       )}
 
       {(hiddenCount > 0 || showHidden) && (
@@ -84,9 +88,10 @@ function byDateDesc(a: MeetingSummary, b: MeetingSummary) {
 interface AgendaGroupsProps {
   meetings: MeetingSummary[];
   onToggleHidden: (meeting: MeetingSummary) => void;
+  onSelectMessage: (messageId: string) => void;
 }
 
-function AgendaGroups({ meetings, onToggleHidden }: AgendaGroupsProps) {
+function AgendaGroups({ meetings, onToggleHidden, onSelectMessage }: AgendaGroupsProps) {
   const groups = new Map<string, MeetingSummary[]>();
   for (const meeting of meetings) {
     const dateKey = new Date(meeting.starts_at!).toLocaleDateString("ja-JP", {
@@ -107,7 +112,7 @@ function AgendaGroups({ meetings, onToggleHidden }: AgendaGroupsProps) {
           <div className="agenda-day-label">{dateKey}</div>
           <ul className="agenda-list">
             {dayMeetings.map((m) => (
-              <MeetingRow key={m.id} meeting={m} onToggleHidden={onToggleHidden} />
+              <MeetingRow key={m.id} meeting={m} onToggleHidden={onToggleHidden} onSelectMessage={onSelectMessage} />
             ))}
           </ul>
         </div>
@@ -116,7 +121,13 @@ function AgendaGroups({ meetings, onToggleHidden }: AgendaGroupsProps) {
   );
 }
 
-function MeetingRow({ meeting, onToggleHidden }: { meeting: MeetingSummary; onToggleHidden: (meeting: MeetingSummary) => void }) {
+interface MeetingRowProps {
+  meeting: MeetingSummary;
+  onToggleHidden: (meeting: MeetingSummary) => void;
+  onSelectMessage: (messageId: string) => void;
+}
+
+function MeetingRow({ meeting, onToggleHidden, onSelectMessage }: MeetingRowProps) {
   const { t } = useTranslation();
   return (
     <li className="agenda-row">
@@ -133,6 +144,15 @@ function MeetingRow({ meeting, onToggleHidden }: { meeting: MeetingSummary; onTo
         <a href={meeting.join_url} target="_blank" rel="noreferrer" className="agenda-link">
           {t("calendar.joinLink")}
         </a>
+      )}
+      {meeting.source_message_id && (
+        <button
+          type="button"
+          className="agenda-link agenda-link-button"
+          onClick={() => onSelectMessage(meeting.source_message_id!)}
+        >
+          {t("calendar.openSourceMail")}
+        </button>
       )}
       <button type="button" className="agenda-hide-button" onClick={() => onToggleHidden(meeting)}>
         {meeting.is_hidden ? t("calendar.unhide") : t("calendar.hide")}

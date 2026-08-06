@@ -10,6 +10,7 @@ from datetime import datetime
 
 from app.db.models.email import EmailAccount, Message
 from app.db.models.meeting import Meeting
+from app.schemas.extraction import ExtractionResult, MeetingInfo
 from app.services import meeting_extraction_service
 from app.services.meeting_extraction_service import _parse_meeting_datetime
 
@@ -55,6 +56,41 @@ def test_extract_meetings_sets_starts_at_from_body_text(db_session):
     db_session.commit()
 
     created = meeting_extraction_service.extract_meetings(db_session, message, None)
+
+    assert len(created) == 1
+    meeting = db_session.query(Meeting).filter(Meeting.id == created[0].id).one()
+    assert meeting.starts_at == datetime(2026, 8, 6, 11, 0)
+    assert meeting.ends_at == datetime(2026, 8, 6, 12, 0)
+
+
+def test_falls_back_to_body_text_when_ai_datetime_text_does_not_parse(db_session):
+    """AI extraction's datetime_text ("追ってご連絡します" — the model
+    correctly summarized that no date was fixed *yet*) used to be picked
+    just because it was non-empty, so the regex over body_text (which does
+    contain an explicit, later-confirmed date) never even ran."""
+    account = EmailAccount(display_name="a", email_address="a@example.com", protocol="imap_smtp")
+    db_session.add(account)
+    db_session.flush()
+
+    message = Message(
+        account_id=account.id,
+        message_uid="1",
+        subject="MONOX小岩さんとの日程調整が完了しました",
+        sender_address="reminder@timerex.net",
+        body_text="日時：2026年8月6日 (木) 11:00 - 12:00（Asia/Tokyo）\nWeb会議室：https://meet.google.com/ifp-uegc-yba",
+    )
+    db_session.add(message)
+    db_session.commit()
+
+    extraction = ExtractionResult(
+        meeting=MeetingInfo(
+            platform="meet",
+            url="https://meet.google.com/ifp-uegc-yba",
+            datetime_text="追ってご連絡します",
+        )
+    )
+
+    created = meeting_extraction_service.extract_meetings(db_session, message, extraction)
 
     assert len(created) == 1
     meeting = db_session.query(Meeting).filter(Meeting.id == created[0].id).one()

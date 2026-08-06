@@ -40,6 +40,12 @@ export const translations = {
     "bulkClassify.done": "{done}件中{failed}件失敗しました。",
     "bulkClassify.allSucceeded": "{done}件すべて分類しました。",
 
+    "reroute.button": "誤って振り分けられたメールを再振り分け",
+    "reroute.help": "既に分類済みのメールを対象に、現在のフォルダ振り分け基準を再適用します（AIへの問い合わせなし・全フォルダが対象）。",
+    "reroute.running": "再振り分け中…",
+    "reroute.done": "{moved}件のメールを正しいフォルダへ移動しました。",
+    "reroute.failed": "再振り分けに失敗しました。",
+
     "theme.toggleAria": "ダークモード切替",
     "theme.light": "☀ ライト",
     "theme.dark": "🌙 ダーク",
@@ -90,6 +96,7 @@ export const translations = {
     "calendar.noPast": "履歴はありません。",
     "calendar.rescheduled": "再設定",
     "calendar.joinLink": "参加リンク",
+    "calendar.openSourceMail": "元のメールを開く",
     "calendar.hide": "非表示にする",
     "calendar.unhide": "表示に戻す",
     "calendar.showHidden": "非表示の会議を表示 ({count})",
@@ -335,6 +342,12 @@ export const translations = {
     "bulkClassify.done": "{failed} of {done} failed.",
     "bulkClassify.allSucceeded": "Classified all {done} message(s).",
 
+    "reroute.button": "Fix misrouted mail",
+    "reroute.help": "Re-applies the current folder-routing criteria to every already-classified message, across all folders — no AI call involved.",
+    "reroute.running": "Re-routing…",
+    "reroute.done": "Moved {moved} message(s) to the correct folder.",
+    "reroute.failed": "Re-routing failed.",
+
     "theme.toggleAria": "Toggle dark mode",
     "theme.light": "☀ Light",
     "theme.dark": "🌙 Dark",
@@ -385,6 +398,7 @@ export const translations = {
     "calendar.noPast": "No history.",
     "calendar.rescheduled": "Rescheduled",
     "calendar.joinLink": "Join link",
+    "calendar.openSourceMail": "Open source mail",
     "calendar.hide": "Hide",
     "calendar.unhide": "Unhide",
     "calendar.showHidden": "Show hidden meetings ({count})",

@@ -575,6 +575,15 @@ body {
   font-size: 12px;
 }
 
+.agenda-link-button {
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  font: inherit;
+}
+
 .agenda-hide-button {
   border: 1px solid var(--border);
   background: var(--bg-secondary);

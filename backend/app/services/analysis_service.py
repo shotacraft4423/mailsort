@@ -270,6 +270,40 @@ def _route_to_category_folder(db: Session, message: Message, classification: Cla
         db.commit()
 
 
+def reroute_classified_messages(db: Session) -> int:
+    """"すでに割り振られてしまったメールの再振り分けを行えるようにして" —
+    _route_to_category_folder only ever runs as a side effect of
+    analyze_message, and nothing re-invokes analyze_message for a message
+    that's already been classified unless someone opens it and clicks
+    再分類, or a bulk-classify happens to cover it — but bulk-classify only
+    ever reads whatever folder the user is currently viewing, and a message
+    that was misfiled by an earlier, buggier version of this heuristic is
+    (by definition) not sitting in the folder someone would think to
+    bulk-classify. This sweeps every already-analyzed message directly from
+    its cached classification, independent of which folder each one is
+    currently in, so it costs zero LLM calls and can be run on demand
+    across the whole mailbox to clean up past misrouting."""
+    settings = get_settings()
+    if not settings.auto_route_by_classification:
+        return 0
+
+    candidates = (
+        db.query(Message, AIAnalysis)
+        .join(AIAnalysis, AIAnalysis.message_id == Message.id)
+        .filter(Message.folder.in_(_AUTO_ROUTABLE_FOLDERS))
+        .all()
+    )
+
+    moved = 0
+    for message, analysis in candidates:
+        classification = ClassificationResult.model_validate(json.loads(analysis.classification_json or "{}"))
+        previous_folder = message.folder
+        _route_to_category_folder(db, message, classification, settings)
+        if message.folder != previous_folder:
+            moved += 1
+    return moved
+
+
 def _extract_meetings_once(db: Session, message: Message, extraction: ExtractionResult) -> None:
     """meeting_extraction_service.extract_meetings() existed (with a regex
     fallback specifically so meeting links are "never missed just because

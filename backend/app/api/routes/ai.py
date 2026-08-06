@@ -43,6 +43,17 @@ async def analyze(message_id: str, force: bool = False, db: Session = Depends(ge
     }
 
 
+@router.post("/reroute-folders")
+def reroute_folders(db: Session = Depends(get_db)) -> dict:
+    """Bulk-corrects folder placement for every already-classified message
+    using its cached classification — no LLM call, so it's safe to run any
+    time a past auto-routing bug (or a settings change) has left mail
+    sitting in the wrong category folder. See
+    analysis_service.reroute_classified_messages."""
+    moved = analysis_service.reroute_classified_messages(db)
+    return {"moved": moved}
+
+
 @router.post("/messages/{message_id}/classify")
 async def classify(message_id: str, force: bool = False, db: Session = Depends(get_db)) -> dict:
     """Classification only, no extraction. Prefer POST .../analyze for the

@@ -85,11 +85,25 @@ def extract_meetings(db: Session, message: Message, extraction: ExtractionResult
             for match in pattern.finditer(message.body_text or ""):
                 urls.append((platform, match.group()))
 
-    # AI-extracted datetime_text takes priority (the model saw the whole
-    # email, including phrasing a regex won't); body_text is the fallback
-    # so a date still gets parsed when AI is off or didn't fill this in.
-    datetime_source = (extraction.meeting.datetime_text if extraction and extraction.meeting else None) or message.body_text or ""
-    starts_at, ends_at = _parse_meeting_datetime(datetime_source)
+    # AI-extracted datetime_text is tried first (the model saw the whole
+    # email, including phrasing a regex won't) but it's free-text the model
+    # wrote, not guaranteed to contain something _parse_meeting_datetime can
+    # read (e.g. "追ってご連絡します") — picking it just because it's
+    # non-empty used to mean body_text's regex fallback never even ran, so
+    # a message whose body plainly said "日時：2026年8月6日 11:00-12:00"
+    # still showed 日時未確定 if the model's own summary of that date didn't
+    # parse. Try each candidate in priority order and keep the first one
+    # that actually yields a date.
+    starts_at, ends_at = None, None
+    for candidate in (
+        extraction.meeting.datetime_text if extraction and extraction.meeting else None,
+        message.body_text,
+    ):
+        if not candidate:
+            continue
+        starts_at, ends_at = _parse_meeting_datetime(candidate)
+        if starts_at is not None:
+            break
 
     created: list[Meeting] = []
     seen = set()

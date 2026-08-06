@@ -6,8 +6,11 @@ folder (案件/人材/重要/要返信/Junk) once classified.
 """
 from __future__ import annotations
 
+import json
+
 import pytest
 
+from app.db.models.ai import AIAnalysis
 from app.db.models.email import EmailAccount, Message
 from app.services import analysis_service
 
@@ -106,4 +109,52 @@ async def test_a_cached_reclassify_still_routes_a_message_that_was_never_routed(
     outcome = await analysis_service.analyze_message(db_session, message)
 
     assert outcome.from_cache is True
+    assert db_session.query(Message).filter(Message.id == message.id).one().folder == "案件"
+
+
+def test_reroute_classified_messages_fixes_mail_stuck_in_the_wrong_folder_without_calling_the_llm(db_session):
+    """"すでに割り振られてしまったメールの再振り分けを行えるようにして" —
+    a message already misfiled under 案件 by an earlier, buggier pass has
+    no reason to ever get re-analyzed: it's not in INBOX, and bulk-classify
+    only ever reads whichever folder is currently open. This must be able
+    to fix it straight from the cached classification already sitting in
+    AIAnalysis, without invoking the LLM provider at all."""
+    message = _make_message(db_session, subject="人材のご紹介", body_text="人材のご紹介です。", folder="案件")
+    db_session.add(
+        AIAnalysis(
+            message_id=message.id,
+            content_hash="irrelevant",
+            provider_used="local_mock",
+            classification_json=json.dumps(
+                {"mail_type": "人材紹介", "categories": [{"label": "人材紹介", "confidence": 1.0}], "reply_required": False}
+            ),
+            extraction_json="{}",
+        )
+    )
+    db_session.commit()
+
+    moved = analysis_service.reroute_classified_messages(db_session)
+
+    assert moved == 1
+    assert db_session.query(Message).filter(Message.id == message.id).one().folder == "人材"
+
+
+def test_reroute_classified_messages_leaves_correctly_filed_mail_untouched(db_session):
+    message = _make_message(db_session, subject="Java案件のご紹介", body_text="Java案件のご紹介です。", folder="案件")
+    db_session.add(
+        AIAnalysis(
+            message_id=message.id,
+            content_hash="irrelevant",
+            provider_used="local_mock",
+            classification_json=json.dumps(
+                {"mail_type": "案件紹介", "categories": [{"label": "案件紹介", "confidence": 1.0}], "reply_required": False}
+            ),
+            extraction_json="{}",
+        )
+    )
+    db_session.commit()
+
+    moved = analysis_service.reroute_classified_messages(db_session)
+
+    assert moved == 0
     assert db_session.query(Message).filter(Message.id == message.id).one().folder == "案件"
