@@ -159,7 +159,13 @@ export default function App() {
     setClassifying(true);
     setClassifyError(null);
     try {
-      await api.analyze(selectedId);
+      // force=true: a manual "再分類" click is the user explicitly asking
+      // for a fresh AI opinion. Without forcing, analyze_message treats
+      // unchanged content as a cache hit and just returns whatever is
+      // already stored — including a stale offline-fallback result from
+      // before a classification fix or before the AI connection itself
+      // got fixed. The button would otherwise silently do nothing.
+      await api.analyze(selectedId, true);
       setSelectedMessage(await api.getMessage(selectedId));
     } catch {
       setClassifyError(t("detail.classifyFailed"));
