@@ -60,3 +60,26 @@ async def test_routing_disabled_via_settings_leaves_message_in_inbox(db_session,
     await analysis_service.analyze_message(db_session, message)
 
     assert db_session.query(Message).filter(Message.id == message.id).one().folder == "INBOX"
+
+
+@pytest.mark.asyncio
+async def test_a_cached_reclassify_still_routes_a_message_that_was_never_routed(db_session, monkeypatch):
+    """Reproduces "全部分類したのにフォルダ分けされない": a message analyzed
+    while routing was off (or before routing existed at all) has a cached
+    AIAnalysis row. Re-running "AI分類を実行"/bulk-classify without
+    force=True hits that cache — routing must still apply there, not only
+    on a fresh (uncached) analysis."""
+    from app.core.config import get_settings
+
+    monkeypatch.setenv("MAILSORT_AUTO_ROUTE_BY_CLASSIFICATION", "false")
+    get_settings.cache_clear()
+    message = _make_message(db_session, subject="Java案件のご紹介", body_text="Java案件のご紹介です。")
+    await analysis_service.analyze_message(db_session, message)
+    assert db_session.query(Message).filter(Message.id == message.id).one().folder == "INBOX"
+
+    monkeypatch.setenv("MAILSORT_AUTO_ROUTE_BY_CLASSIFICATION", "true")
+    get_settings.cache_clear()
+    outcome = await analysis_service.analyze_message(db_session, message)
+
+    assert outcome.from_cache is True
+    assert db_session.query(Message).filter(Message.id == message.id).one().folder == "案件"

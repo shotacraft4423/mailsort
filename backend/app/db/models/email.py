@@ -72,6 +72,14 @@ class Message(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     thread: Mapped[Thread | None] = relationship(back_populates="messages")
     attachments: Mapped[list["Attachment"]] = relationship(back_populates="message", cascade="all, delete-orphan")
 
+    @property
+    def account_email_address(self) -> str:
+        """Which of the user's configured mailboxes this message belongs
+        to — with only one account this was never ambiguous, but adding a
+        second (or third) makes "which address did this arrive at" a real
+        question the mail list/detail views had no way to answer."""
+        return self.account.email_address if self.account else ""
+
 
 class Attachment(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "attachments"

@@ -32,6 +32,10 @@ export default function App() {
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number; failed: number } | null>(null);
   const [bulkResultMessage, setBulkResultMessage] = useState<string | null>(null);
   const bulkRunning = bulkProgress !== null && bulkProgress.done < bulkProgress.total;
+  // With only one account configured, "which address did this arrive at"
+  // is never ambiguous — only show the receiving address once there's
+  // more than one to distinguish between.
+  const [hasMultipleAccounts, setHasMultipleAccounts] = useState(false);
   // Set right before switching `folder` when navigating to a message that
   // lives in a different folder than the one currently shown (e.g. from a
   // dashboard reminder) — the [folder, view] effect below consumes it
@@ -43,6 +47,13 @@ export default function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
   }, [dark]);
+
+  useEffect(() => {
+    api
+      .listAccounts()
+      .then((accounts) => setHasMultipleAccounts(accounts.length > 1))
+      .catch(() => {});
+  }, []);
 
   const reloadMessages = () => {
     api
@@ -174,6 +185,7 @@ export default function App() {
     searchResults?.map((r) => ({
       id: r.id,
       account_id: "",
+      account_email_address: "",
       folder,
       subject: r.subject,
       sender_name: "",
@@ -302,7 +314,7 @@ export default function App() {
       {view === "mail" && (
         <div className="app-body">
           <FolderList active={folder} onSelect={setFolder} />
-          <MessageList messages={displayedMessages} selectedId={selectedId} onSelect={setSelectedId} />
+          <MessageList messages={displayedMessages} selectedId={selectedId} onSelect={setSelectedId} showAccount={hasMultipleAccounts} />
           <section className="message-detail">
             {selectedMessage ? (
               replying ? (
@@ -338,6 +350,9 @@ export default function App() {
                   <p className="detail-meta">
                     {selectedMessage.sender_name} &lt;{selectedMessage.sender_address}&gt;
                   </p>
+                  {hasMultipleAccounts && (
+                    <p className="detail-meta detail-meta-account">{t("detail.receivedAt", { address: selectedMessage.account_email_address })}</p>
+                  )}
                   {selectedMessage.attachments.length > 0 && (
                     <ul className="attachment-list">
                       {selectedMessage.attachments.map((a) => (

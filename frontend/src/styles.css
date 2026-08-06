@@ -143,6 +143,21 @@ body {
   white-space: nowrap;
 }
 
+.message-row-account {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-meta-account {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-top: -6px;
+}
+
 .message-detail {
   padding: 16px 24px;
   overflow-y: auto;

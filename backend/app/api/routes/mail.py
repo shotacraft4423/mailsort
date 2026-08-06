@@ -5,7 +5,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_db
 from app.db.models.ai import AIAnalysis, AuditLogEntry
@@ -24,6 +24,7 @@ router = APIRouter(prefix="/mail", tags=["mail"])
 class MessageOut(BaseModel):
     id: str
     account_id: str
+    account_email_address: str
     folder: str
     subject: str
     sender_name: str
@@ -82,6 +83,16 @@ def _display_body_text(message: Message) -> str:
     return message.body_text
 
 
+@router.get("/folders", response_model=list[str])
+def list_local_folders(db: Session = Depends(get_db)) -> list[str]:
+    """Distinct Message.folder values actually in use — lets the sidebar
+    show any folder a rule's "move_to_folder" action routes into, not just
+    the fixed 案件/人材/重要/要返信/Junk set the built-in classification
+    heuristic knows about (custom rule folder names are free text)."""
+    rows = db.query(Message.folder).distinct().all()
+    return sorted({folder for (folder,) in rows if folder})
+
+
 @router.get("", response_model=list[MessageOut])
 def list_messages(
     folder: str = "INBOX",
@@ -90,7 +101,7 @@ def list_messages(
     offset: int = 0,
     db: Session = Depends(get_db),
 ) -> list[Message]:
-    q = db.query(Message).filter(Message.folder == folder)
+    q = db.query(Message).options(joinedload(Message.account)).filter(Message.folder == folder)
     if account_id:
         q = q.filter(Message.account_id == account_id)
     return q.order_by(Message.received_at.desc()).offset(offset).limit(limit).all()

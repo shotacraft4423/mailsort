@@ -5,9 +5,10 @@ interface Props {
   messages: MessageSummary[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  showAccount?: boolean;
 }
 
-export function MessageList({ messages, selectedId, onSelect }: Props) {
+export function MessageList({ messages, selectedId, onSelect, showAccount = false }: Props) {
   const { t } = useTranslation();
 
   if (messages.length === 0) {
@@ -32,6 +33,9 @@ export function MessageList({ messages, selectedId, onSelect }: Props) {
             {message.is_flagged && <span aria-label={t("messageList.flaggedAria")}>★ </span>}
             {message.subject || t("common.noSubject")}
           </div>
+          {showAccount && message.account_email_address && (
+            <div className="message-row-account">{message.account_email_address}</div>
+          )}
         </li>
       ))}
     </ul>

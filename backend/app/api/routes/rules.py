@@ -82,3 +82,13 @@ def toggle_rule(rule_id: str, db: Session = Depends(get_db)) -> RuleOut:
     db.commit()
     db.refresh(rule)
     return _to_out(rule)
+
+
+@router.delete("/{rule_id}")
+def delete_rule(rule_id: str, db: Session = Depends(get_db)) -> dict:
+    rule = db.query(Rule).filter(Rule.id == rule_id).one_or_none()
+    if rule is None:
+        raise HTTPException(status_code=404, detail="rule not found")
+    db.delete(rule)
+    db.commit()
+    return {"status": "deleted"}

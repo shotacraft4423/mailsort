@@ -54,6 +54,7 @@ export const translations = {
     "detail.flag": "☆ フラグ",
     "detail.archive": "アーカイブ",
     "detail.selectPrompt": "メールを選択してください（j/k で移動、r で返信）",
+    "detail.receivedAt": "宛先: {address}",
 
     "businessCard.registered": "登録済み",
     "businessCard.registering": "登録中…",
@@ -179,8 +180,10 @@ export const translations = {
     "admin.namePlaceholder": "名前",
     "admin.taskLabel": "対象タスク",
     "admin.rulesHelp":
-      "「特定企業は必ず重要」「特定キーワードはSlack通知」のようなノーコード条件分岐を設定できます。" +
-      "下で条件（メールのどの項目が・どんな値なら一致するか）を組み立て、一致したときの動作（アクション）を選びます。",
+      "「特定企業は必ず重要」「特定キーワードはSlack通知」「この分類は専用フォルダへ移動」のようなノーコード条件分岐を設定できます。" +
+      "下で条件（メールのどの項目が・どんな値なら一致するか）を組み立て、一致したときの動作（アクション）を選びます。" +
+      "フォルダの振り分け基準を変えたい場合は、動作を「フォルダへ移動する」にして条件（例: 種別=案件紹介）と移動先フォルダ名を指定してください。" +
+      "ルールは自動分類のあとに実行されるため、既定の振り分けより優先されます。",
     "admin.priorityLabel": "優先度 {priority}",
     "admin.disable": "無効化",
     "admin.enable": "有効化",
@@ -198,6 +201,8 @@ export const translations = {
     "admin.addCondition": "条件を追加",
     "admin.actionTypeLabel": "一致したときの動作",
     "admin.tagNameLabel": "タグ名（動作が「タグを付ける」の場合）",
+    "admin.targetFolderLabel": "移動先フォルダ名",
+    "admin.targetFolderPlaceholder": "例: 案件 / 人材 / 最重要顧客 など自由入力",
     "admin.createRule": "ルール作成",
     "admin.webhookPlaceholder": "Slack Webhook URL（サンプルプラグイン用）",
     "admin.noPlugins": "プラグインが見つかりません（plugins/ ディレクトリを確認してください）。",
@@ -284,6 +289,7 @@ export const translations = {
     "ruleOperator.in": "が次のいずれかに一致する",
 
     "actionType.tag": "タグを付ける",
+    "actionType.move_to_folder": "フォルダへ移動する",
     "actionType.notify_slack": "Slackへ通知する（要プラグイン有効化）",
   },
   en: {
@@ -332,6 +338,7 @@ export const translations = {
     "detail.flag": "☆ Flag",
     "detail.archive": "Archive",
     "detail.selectPrompt": "Select a message (j/k to move, r to reply)",
+    "detail.receivedAt": "To: {address}",
 
     "businessCard.registered": "Registered",
     "businessCard.registering": "Registering…",
@@ -476,6 +483,8 @@ export const translations = {
     "admin.addCondition": "Add condition",
     "admin.actionTypeLabel": "Action when matched",
     "admin.tagNameLabel": "Tag name (when action is \"add tag\")",
+    "admin.targetFolderLabel": "Destination folder name",
+    "admin.targetFolderPlaceholder": "e.g. 案件 / 人材 / a custom name — free text",
     "admin.createRule": "Create rule",
     "admin.webhookPlaceholder": "Slack webhook URL (for the sample plugin)",
     "admin.noPlugins": "No plugins found (check the plugins/ directory).",
@@ -559,6 +568,7 @@ export const translations = {
     "ruleOperator.in": "is one of",
 
     "actionType.tag": "Add tag",
+    "actionType.move_to_folder": "Move to folder",
     "actionType.notify_slack": "Notify Slack (requires enabling the plugin)",
   },
 } satisfies Record<Language, Record<string, string>>;

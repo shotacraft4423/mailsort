@@ -101,11 +101,23 @@ async def analyze_message(db: Session, message: Message, *, force: bool = False)
     existing = db.query(AIAnalysis).filter(AIAnalysis.message_id == message.id).one_or_none()
     if existing and existing.content_hash == hash_input and not force:
         cached_classification = ClassificationResult.model_validate(json.loads(existing.classification_json or "{}"))
+        cached_extraction = ExtractionResult.model_validate(json.loads(existing.extraction_json or "{}"))
+        # Folder routing / meeting extraction / contact upsert used to only
+        # run on the fresh-analysis path below. Every message that had
+        # already been classified before those features existed (or before
+        # auto-routing was turned on) would then hit this cache branch on
+        # every later re-classify and never get routed/upserted at all —
+        # "全部分類したのにフォルダ分けされない" — even though re-running
+        # rules/plugins on a cache hit was already correct. Cache hits now
+        # get exactly the same side effects a fresh analysis does.
+        _extract_meetings_once(db, message, cached_extraction)
+        _route_to_category_folder(db, message, cached_classification, settings)
+        company_aggregation_service.upsert_company_and_contact(db, message, cached_extraction)
         await _run_rules_and_plugins(db, message, existing, cached_classification)
         return AnalysisOutcome(
             analysis=existing,
             classification=cached_classification,
-            extraction=ExtractionResult.model_validate(json.loads(existing.extraction_json or "{}")),
+            extraction=cached_extraction,
             from_cache=True,
             is_fallback=existing.is_fallback,
         )

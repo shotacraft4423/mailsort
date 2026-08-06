@@ -72,24 +72,41 @@ def evaluate_rules(db: Session, message: Message, analysis: AIAnalysis | None) -
 
 
 def apply_actions(db: Session, message: Message, fired: list[RuleFireResult]) -> None:
-    """Executes what evaluate_rules() found. Only "tag" is a built-in
-    action today (adds a MessageTag with source="rule", confidence 1.0 —
-    a rule match is a certainty, not a probabilistic guess). Any other
-    action type (e.g. "notify_slack", "webhook") is left for a plugin to
-    interpret: see services/plugin_manager.py's dispatch, which runs
-    alongside this and receives the same message/classification — a
-    matched rule with an unrecognized action type is a no-op here rather
-    than an error, since plugins are the intended extension point.
+    """Executes what evaluate_rules() found. Two built-in actions today:
+    "tag" (adds a MessageTag with source="rule", confidence 1.0 — a rule
+    match is a certainty, not a probabilistic guess) and "move_to_folder"
+    (the user-configurable alternative/override to analysis_service's
+    hardcoded category->folder heuristic — "どんな基準でフォルダ分けするの
+    かも設定できるように": conditions here can match on mail_type,
+    priority, sender, subject, etc., and the destination folder is
+    whatever the user typed, so it isn't limited to the built-in 案件/
+    人材/重要/要返信/Junk set). Rules run after the heuristic in
+    analysis_service, so a matching rule always has the final say on
+    which folder a message ends up in. Any other action type (e.g.
+    "notify_slack", "webhook") is left for a plugin to interpret: see
+    services/plugin_manager.py's dispatch, which runs alongside this and
+    receives the same message/classification — a matched rule with an
+    unrecognized action type is a no-op here rather than an error, since
+    plugins are the intended extension point.
     """
     if not fired:
         return
 
     for result in fired:
         for action in result.actions:
-            if action.get("type") == "tag":
+            action_type = action.get("type")
+            if action_type == "tag":
                 _apply_tag_action(db, message, action.get("params", {}).get("tag"))
+            elif action_type == "move_to_folder":
+                _apply_move_to_folder_action(db, message, action.get("params", {}).get("folder"))
 
     db.commit()
+
+
+def _apply_move_to_folder_action(db: Session, message: Message, folder: str | None) -> None:
+    if not folder:
+        return
+    message.folder = folder
 
 
 def _apply_tag_action(db: Session, message: Message, tag_name: str | None) -> None:

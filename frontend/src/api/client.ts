@@ -25,6 +25,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export interface MessageSummary {
   id: string;
   account_id: string;
+  account_email_address: string;
   folder: string;
   subject: string;
   sender_name: string;
@@ -401,6 +402,7 @@ export const api = {
 
   listAccounts: () => request<AccountSummary[]>("/accounts"),
   getAccountFolders: (accountId: string) => request<string[]>(`/accounts/${accountId}/folders`),
+  listLocalFolders: () => request<string[]>("/mail/folders"),
   createAccount: (input: AccountCreateInput) =>
     request<AccountSummary>("/accounts", { method: "POST", body: JSON.stringify(input) }),
   deleteAccount: (id: string) => request<{ status: string }>(`/accounts/${id}`, { method: "DELETE" }),
@@ -436,6 +438,7 @@ export const api = {
   createRule: (input: { name: string; priority?: number; match_mode?: string; conditions: RuleCondition[]; actions: RuleAction[] }) =>
     request<Rule>("/rules", { method: "POST", body: JSON.stringify(input) }),
   toggleRule: (id: string) => request<Rule>(`/rules/${id}/toggle`, { method: "PATCH" }),
+  deleteRule: (id: string) => request<{ status: string }>(`/rules/${id}`, { method: "DELETE" }),
 
   findDealDuplicates: (dealId: string) =>
     request<{ other_id: string; similarity: number; relation: string; reason: string }[]>(

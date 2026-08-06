@@ -185,7 +185,7 @@ function PromptsPanel() {
 
 const RULE_FIELDS = ["subject", "sender_address", "sender_name", "body_text", "mail_type", "priority"];
 const RULE_OPERATORS = ["equals", "contains", "starts_with", "in"];
-const ACTION_TYPES = ["tag", "notify_slack"];
+const ACTION_TYPES = ["tag", "move_to_folder", "notify_slack"];
 
 function RulesPanel() {
   const { t } = useTranslation();
@@ -226,7 +226,17 @@ function RulesPanel() {
     await load();
   };
 
-  const actionLabel = (type: string) => (type === "tag" || type === "notify_slack" ? t(`actionType.${type}`) : type);
+  const deleteRule = async (id: string) => {
+    await api.deleteRule(id);
+    await load();
+  };
+
+  const actionLabel = (action: RuleAction) => {
+    const label = ACTION_TYPES.includes(action.type) ? t(`actionType.${action.type}`) : action.type;
+    if (action.type === "tag" && action.params?.tag) return `${label} 「${action.params.tag}」`;
+    if (action.type === "move_to_folder" && action.params?.folder) return `${label} 「${action.params.folder}」`;
+    return label;
+  };
   const fieldLabel = (field: string) => (RULE_FIELDS.includes(field) ? t(`ruleField.${field}`) : field);
   const operatorLabel = (op: string) => (RULE_OPERATORS.includes(op) ? t(`ruleOperator.${op}`) : op);
 
@@ -241,12 +251,13 @@ function RulesPanel() {
               <strong>{r.name}</strong>
               <span>{t("admin.priorityLabel", { priority: r.priority })}</span>
               <button onClick={() => toggle(r.id)}>{r.is_active ? t("admin.disable") : t("admin.enable")}</button>
+              <button onClick={() => deleteRule(r.id)}>{t("common.delete")}</button>
             </div>
             <div className="rule-summary">
               {r.match_mode === "all" ? t("admin.conditionsSummaryAll") : t("admin.conditionsSummaryAny")}{" "}
               {r.conditions.map((c) => `${fieldLabel(c.field)} ${operatorLabel(c.operator)} "${c.value}"`).join(" / ")}
             </div>
-            <div className="rule-summary">{t("admin.actionsSummary", { actions: r.actions.map((a) => actionLabel(a.type)).join(", ") })}</div>
+            <div className="rule-summary">{t("admin.actionsSummary", { actions: r.actions.map(actionLabel).join(", ") })}</div>
           </li>
         ))}
         {rules.length === 0 && <li className="ai-empty">{t("admin.noRules")}</li>}
@@ -304,13 +315,24 @@ function RulesPanel() {
             ))}
           </select>
         </label>
-        <label className="rule-action-field">
-          {t("admin.tagNameLabel")}
-          <input
-            value={actions[0]?.params?.tag ?? ""}
-            onChange={(e) => setActions([{ ...actions[0], params: { ...actions[0]?.params, tag: e.target.value } }])}
-          />
-        </label>
+        {actions[0]?.type === "move_to_folder" ? (
+          <label className="rule-action-field">
+            {t("admin.targetFolderLabel")}
+            <input
+              placeholder={t("admin.targetFolderPlaceholder")}
+              value={actions[0]?.params?.folder ?? ""}
+              onChange={(e) => setActions([{ ...actions[0], params: { ...actions[0]?.params, folder: e.target.value } }])}
+            />
+          </label>
+        ) : actions[0]?.type === "tag" ? (
+          <label className="rule-action-field">
+            {t("admin.tagNameLabel")}
+            <input
+              value={actions[0]?.params?.tag ?? ""}
+              onChange={(e) => setActions([{ ...actions[0], params: { ...actions[0]?.params, tag: e.target.value } }])}
+            />
+          </label>
+        ) : null}
 
         <button className="primary" onClick={createRule} disabled={saving}>
           {t("admin.createRule")}
