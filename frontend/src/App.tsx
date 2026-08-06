@@ -49,6 +49,8 @@ export default function App() {
   const [bulkCount, setBulkCount] = useState(50);
   const [rerouting, setRerouting] = useState(false);
   const [rerouteResultMessage, setRerouteResultMessage] = useState<string | null>(null);
+  const [reclassifyingFallback, setReclassifyingFallback] = useState(false);
+  const [reclassifyFallbackResultMessage, setReclassifyFallbackResultMessage] = useState<string | null>(null);
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
@@ -278,6 +280,32 @@ export default function App() {
     }
   };
 
+  // "オフライン分類のままのメールだけAIで再分類したい" — bulk-classify and
+  // 再分類 both skip already-analyzed mail unless content changed, so a
+  // message that fell back once never gets a fresh try on its own. This
+  // targets exactly (and only) the messages currently flagged as fallback,
+  // scoped to the folder/account currently open, so it doesn't burn tokens
+  // re-sending mail that's already been classified successfully.
+  const runReclassifyFallback = async () => {
+    if (reclassifyingFallback) return;
+    setReclassifyingFallback(true);
+    setReclassifyFallbackResultMessage(null);
+    try {
+      const { attempted, recovered, still_fallback } = await api.reclassifyFallback(folder, selectedAccountId ?? undefined);
+      setReclassifyFallbackResultMessage(
+        attempted === 0
+          ? t("reclassifyFallback.none")
+          : t("reclassifyFallback.done", { recovered, stillFallback: still_fallback })
+      );
+      reloadMessages();
+      if (selectedId) api.getMessage(selectedId).then(setSelectedMessage).catch(() => {});
+    } catch {
+      setReclassifyFallbackResultMessage(t("reclassifyFallback.failed"));
+    } finally {
+      setReclassifyingFallback(false);
+    }
+  };
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -365,6 +393,17 @@ export default function App() {
                 {rerouting ? t("reroute.running") : t("reroute.button")}
               </button>
               {!rerouting && rerouteResultMessage && <span className="bulk-classify-result">{rerouteResultMessage}</span>}
+              <button
+                type="button"
+                onClick={runReclassifyFallback}
+                disabled={reclassifyingFallback}
+                title={t("reclassifyFallback.help")}
+              >
+                {reclassifyingFallback ? t("reclassifyFallback.running") : t("reclassifyFallback.button")}
+              </button>
+              {!reclassifyingFallback && reclassifyFallbackResultMessage && (
+                <span className="bulk-classify-result">{reclassifyFallbackResultMessage}</span>
+              )}
             </span>
           </div>
         )}

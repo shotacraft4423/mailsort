@@ -49,6 +49,13 @@ export const translations = {
     "reroute.done": "{moved}件のメールを正しいフォルダへ移動しました。",
     "reroute.failed": "再振り分けに失敗しました。",
 
+    "reclassifyFallback.button": "オフライン分類のメールをAIで再分類",
+    "reclassifyFallback.help": "「⚠ オフライン簡易ルールによるものです」と表示されているメール（現在のフォルダ・アカウント内）だけを対象に、AIへ再問い合わせします。既に正常にAI分類済みのメールは対象外なので、無駄なAPI利用は発生しません。",
+    "reclassifyFallback.running": "再分類中…",
+    "reclassifyFallback.none": "オフライン分類のメールはありませんでした。",
+    "reclassifyFallback.done": "{recovered}件がAI分類に成功しました（{stillFallback}件は依然オフライン分類のままです）。",
+    "reclassifyFallback.failed": "再分類に失敗しました。",
+
     "theme.toggleAria": "ダークモード切替",
     "theme.light": "☀ ライト",
     "theme.dark": "🌙 ダーク",
@@ -166,6 +173,9 @@ export const translations = {
     "settings.anthropicKeyLabel": "Anthropic APIキー（{status}）",
     "settings.openaiKeySaved": "OpenAI互換のAPIキーを保存しました。プロバイダーを openai_compatible に切り替えました。",
     "settings.anthropicKeySaved": "Anthropic のAPIキーを保存しました。",
+    "settings.testConnectionButton": "接続テスト",
+    "settings.testConnectionRunning": "テスト中…",
+    "settings.testConnectionRequestFailed": "テストのリクエスト自体に失敗しました。バックエンドが起動しているか確認してください。",
     "settings.aiHelp":
       "保存したキーはこの画面に再表示されません。GPT-4o miniなど低コストモデルが既定のため、まずはOpenAIキーの保存だけで動作確認できます。" +
       "設定はバックエンド再起動後も保持されます。",
@@ -359,6 +369,13 @@ export const translations = {
     "reroute.done": "Moved {moved} message(s) to the correct folder.",
     "reroute.failed": "Re-routing failed.",
 
+    "reclassifyFallback.button": "Re-classify offline-flagged mail",
+    "reclassifyFallback.help": "Re-asks the AI for just the messages currently flagged \"⚠ offline fallback\" in this folder/account. Mail already classified successfully is skipped, so no API usage is wasted.",
+    "reclassifyFallback.running": "Re-classifying…",
+    "reclassifyFallback.none": "No offline-flagged mail here.",
+    "reclassifyFallback.done": "{recovered} message(s) succeeded with real AI ({stillFallback} still offline).",
+    "reclassifyFallback.failed": "Re-classify failed.",
+
     "theme.toggleAria": "Toggle dark mode",
     "theme.light": "☀ Light",
     "theme.dark": "🌙 Dark",
@@ -476,6 +493,9 @@ export const translations = {
     "settings.anthropicKeyLabel": "Anthropic API key ({status})",
     "settings.openaiKeySaved": "OpenAI-compatible API key saved. Switched the provider to openai_compatible.",
     "settings.anthropicKeySaved": "Anthropic API key saved.",
+    "settings.testConnectionButton": "Test connection",
+    "settings.testConnectionRunning": "Testing…",
+    "settings.testConnectionRequestFailed": "The test request itself failed. Check that the backend is running.",
     "settings.aiHelp":
       "Saved keys are never shown again on this screen. The default is a low-cost model (GPT-4o mini), so saving just the OpenAI key is enough to try it out. " +
       "Settings persist across backend restarts.",

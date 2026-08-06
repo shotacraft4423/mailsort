@@ -54,6 +54,18 @@ def reroute_folders(db: Session = Depends(get_db)) -> dict:
     return {"moved": moved}
 
 
+@router.post("/reclassify-fallback")
+async def reclassify_fallback(
+    folder: str | None = None, account_id: str | None = None, limit: int = 50, db: Session = Depends(get_db)
+) -> dict:
+    """Force-reclassifies just the messages currently flagged is_fallback —
+    a targeted retry for "うちのメールが全部オフライン分類のまま" once the
+    underlying AI connection issue is believed fixed, without re-spending
+    tokens on mail that was already classified successfully. See
+    analysis_service.reclassify_fallback_messages."""
+    return await analysis_service.reclassify_fallback_messages(db, folder=folder, account_id=account_id, limit=limit)
+
+
 @router.post("/messages/{message_id}/classify")
 async def classify(message_id: str, force: bool = False, db: Session = Depends(get_db)) -> dict:
     """Classification only, no extraction. Prefer POST .../analyze for the

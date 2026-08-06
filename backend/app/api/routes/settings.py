@@ -15,7 +15,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.db.session import get_db
-from app.providers.llm.registry import list_providers
+from app.providers.llm.base import LLMProviderError
+from app.providers.llm.registry import get_llm_provider, list_providers
 from app.services.settings_service import persist_settings
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -107,3 +108,39 @@ def update_settings(payload: SettingsUpdate, db: Session = Depends(get_db)) -> S
     apply_env_patch(data)
     persist_settings(db, data)
     return read_settings()
+
+
+class ConnectionTestResult(BaseModel):
+    success: bool
+    provider: str
+    detail: str
+
+
+@router.post("/test-connection", response_model=ConnectionTestResult)
+async def test_connection() -> ConnectionTestResult:
+    """"APIキーの設定画面に検証を設けたらどうかな。それでだめだったらそこに
+    エラーを出す" — a direct, one-shot check that's deliberately independent
+    of analyze_message's content_hash cache. Bulk-classify and 再分類
+    kept looking "inconclusive" precisely because a cache hit on an
+    already-classified message never touches the provider at all — no
+    exception, no fallback_reason, nothing to look at. This always makes a
+    live call with the exact method (complete_json) classify/extract
+    actually use, so success/failure here is unambiguous."""
+    settings = get_settings()
+    provider = get_llm_provider()
+    if not settings.ai_enabled:
+        return ConnectionTestResult(success=False, provider=provider.name, detail="AI機能が無効化されています（設定の「AI機能を有効化」をONにしてください）。")
+    if provider.name == "local_mock":
+        return ConnectionTestResult(
+            success=False, provider=provider.name, detail="プロバイダーが未設定です（LLMプロバイダーとAPIキーを設定してください）。"
+        )
+    try:
+        _raw, response = await provider.complete_json(
+            system_prompt='接続確認です。必ずJSON形式で {"ok": true} という単一のオブジェクトのみを返してください。他の文章は含めないでください。',
+            user_prompt="接続テスト",
+        )
+        return ConnectionTestResult(
+            success=True, provider=provider.name, detail=f"接続に成功しました（応答モデル: {response.model or '不明'}）。"
+        )
+    except LLMProviderError as exc:
+        return ConnectionTestResult(success=False, provider=provider.name, detail=str(exc))

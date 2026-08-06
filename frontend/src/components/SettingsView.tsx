@@ -186,6 +186,8 @@ function AISettingsSection() {
   const [openaiKeyInput, setOpenaiKeyInput] = useState("");
   const [anthropicKeyInput, setAnthropicKeyInput] = useState("");
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; provider: string; detail: string } | null>(null);
 
   useEffect(() => {
     api.getSettings().then(setSettings).catch(() => setSettings(null));
@@ -215,6 +217,18 @@ function AISettingsSection() {
     await update({ anthropic_api_key: anthropicKeyInput.trim() });
     setAnthropicKeyInput("");
     setSavedMessage(t("settings.anthropicKeySaved"));
+  };
+
+  const runConnectionTest = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      setTestResult(await api.testConnection());
+    } catch {
+      setTestResult({ success: false, provider: "", detail: t("settings.testConnectionRequestFailed") });
+    } finally {
+      setTesting(false);
+    }
   };
 
   return (
@@ -313,6 +327,17 @@ function AISettingsSection() {
       </label>
 
       {savedMessage && <p className="reply-status">{savedMessage}</p>}
+
+      <div className="connection-test">
+        <button onClick={runConnectionTest} disabled={testing}>
+          {testing ? t("settings.testConnectionRunning") : t("settings.testConnectionButton")}
+        </button>
+        {testResult && (
+          <p className={testResult.success ? "connection-test-result ok" : "connection-test-result error"}>
+            {testResult.detail}
+          </p>
+        )}
+      </div>
 
       <p className="ai-empty">{t("settings.aiHelp")}</p>
     </section>

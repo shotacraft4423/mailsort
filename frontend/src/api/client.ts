@@ -405,6 +405,13 @@ export const api = {
       body: JSON.stringify({ corrected_mail_type: correctedMailType, note }),
     }),
   rerouteFolders: () => request<{ moved: number }>("/ai/reroute-folders", { method: "POST" }),
+  reclassifyFallback: (folder?: string, accountId?: string) =>
+    request<{ attempted: number; recovered: number; still_fallback: number }>(
+      `/ai/reclassify-fallback?${folder ? `folder=${encodeURIComponent(folder)}&` : ""}${
+        accountId ? `account_id=${accountId}` : ""
+      }`,
+      { method: "POST" }
+    ),
 
   chat: (question: string) =>
     request<{ answer: string; source_message_ids: string[] }>(`/chat`, {
@@ -424,6 +431,8 @@ export const api = {
   getSettings: () => request<SettingsData>("/settings"),
   updateSettings: (input: SettingsUpdateInput) =>
     request<SettingsData>("/settings", { method: "PUT", body: JSON.stringify(input) }),
+  testConnection: () =>
+    request<{ success: boolean; provider: string; detail: string }>("/settings/test-connection", { method: "POST" }),
 
   listCompanies: () => request<CompanySummary[]>("/companies"),
   getCompany: (id: string) => request<CompanyDetail>(`/companies/${id}`),

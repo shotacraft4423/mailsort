@@ -328,6 +328,38 @@ def reroute_classified_messages(db: Session) -> int:
     return moved
 
 
+async def reclassify_fallback_messages(
+    db: Session, *, folder: str | None = None, account_id: str | None = None, limit: int = 50
+) -> dict[str, int]:
+    """"一括分類が早すぎるのでAI呼び出していなそう" — correct: bulk-classify
+    and 再分類 both call analyze_message without force, which for an
+    already-analyzed message is a cache hit (matching content_hash) that
+    returns whatever's already stored without ever touching the provider
+    again. For a message that fell back once, that means it stays on the
+    offline result forever — no error, no exception, nothing to look at —
+    until someone force-reclassifies that exact message. This finds every
+    message currently flagged is_fallback and force-reclassifies just
+    those (skips everything already successfully AI-classified, unlike
+    forcing bulk-classify wholesale, which would burn tokens re-sending
+    mail that's already fine)."""
+    q = db.query(Message).join(AIAnalysis, AIAnalysis.message_id == Message.id).filter(AIAnalysis.is_fallback.is_(True))
+    if folder:
+        q = q.filter(Message.folder == folder)
+    if account_id:
+        q = q.filter(Message.account_id == account_id)
+    messages = q.limit(limit).all()
+
+    recovered = 0
+    still_fallback = 0
+    for message in messages:
+        outcome = await analyze_message(db, message, force=True)
+        if outcome.is_fallback:
+            still_fallback += 1
+        else:
+            recovered += 1
+    return {"attempted": len(messages), "recovered": recovered, "still_fallback": still_fallback}
+
+
 def _extract_meetings_once(db: Session, message: Message, extraction: ExtractionResult) -> None:
     """meeting_extraction_service.extract_meetings() existed (with a regex
     fallback specifically so meeting links are "never missed just because

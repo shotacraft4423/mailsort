@@ -875,6 +875,41 @@ a:focus-visible {
   cursor: pointer;
 }
 
+.connection-test {
+  margin: 14px 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.connection-test button {
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
+.connection-test-result {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.connection-test-result.ok {
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+  color: var(--success);
+  border: 1px solid color-mix(in srgb, var(--success) 35%, transparent);
+}
+
+.connection-test-result.error {
+  background: color-mix(in srgb, var(--danger) 15%, transparent);
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+}
+
 /* Reply composer */
 
 .reply-composer {
