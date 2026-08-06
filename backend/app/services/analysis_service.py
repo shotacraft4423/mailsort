@@ -70,6 +70,31 @@ class AnalysisOutcome:
     is_fallback: bool
 
 
+def _required_json_key_instruction() -> str:
+    """"すべてがオフライン簡易ルールで振り分けられてる" — root cause found
+    from real production logs: the real provider call was succeeding every
+    time (no HTTP error, no timeout), but the model was returning JSON with
+    its own Japanese-translated key names instead of our schema's field
+    names — e.g. {"案件か人材か": "..."} instead of {"mail_type": "..."} —
+    because nothing ever told it what the literal key names had to be, only
+    a prose description of what to determine. ClassificationResult.mail_type
+    is required, so *any* key-name deviation is a guaranteed pydantic
+    ValidationError, which is why this reproduced 100% of the time rather
+    than intermittently. Listing the exact field names (pulled from the
+    Pydantic models themselves so this can't drift out of sync) fixes it at
+    the source, for both the default prompts and any GUI-edited custom one."""
+    classification_fields = ", ".join(ClassificationResult.model_fields.keys())
+    extraction_fields = ", ".join(ExtractionResult.model_fields.keys())
+    return (
+        "重要: JSONのキー名は必ず以下の英語のフィールド名をそのまま使用してください。"
+        "日本語に意訳したキー名（例: 「案件か人材か」）や独自のキー名を作ってはいけません。\n"
+        f"classification で使うキー名: {classification_fields}\n"
+        f"extraction で使うキー名: {extraction_fields}\n"
+        "特に classification.mail_type は必須項目です。既存のカテゴリに当てはまらない場合も、"
+        "最も近いカテゴリ名（または「その他」）を必ず文字列で設定してください。"
+    )
+
+
 def _combined_system_prompt(db: Session) -> tuple[str, str | None]:
     """Builds one system prompt out of whichever classification/extraction
     prompts are currently active (GUI-edited or module defaults), and
@@ -87,7 +112,8 @@ def _combined_system_prompt(db: Session) -> tuple[str, str | None]:
         f"【タスク1: 分類】{classification_prompt}\n\n"
         f"【タスク2: 抽出】{extraction_prompt}\n\n"
         '必ず {"classification": {タスク1のJSONスキーマ}, "extraction": {タスク2のJSONスキーマ}} '
-        "という単一のJSONオブジェクトのみを返してください。他の文章は含めないでください。"
+        "という単一のJSONオブジェクトのみを返してください。他の文章は含めないでください。\n\n"
+        f"{_required_json_key_instruction()}"
     )
     template_id = active_classification.template_id if active_classification else None
     return system_prompt, template_id

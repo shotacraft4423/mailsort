@@ -107,6 +107,23 @@ def build_context(message: Message, *, anonymize: bool) -> dict[str, str]:
     }
 
 
+def _required_json_key_instruction() -> str:
+    """See analysis_service._required_json_key_instruction's docstring for
+    the full story: without this, a real provider call can succeed and
+    still fail validation 100% of the time because the model invents its
+    own (often Japanese-translated) key names instead of using mail_type
+    etc. verbatim — this is the standalone-classify-endpoint twin of that
+    fix, kept next to ClassificationResult so it can't drift out of sync."""
+    fields = ", ".join(ClassificationResult.model_fields.keys())
+    return (
+        "重要: JSONのキー名は必ず以下の英語のフィールド名をそのまま使用してください。"
+        "日本語に意訳したキー名や独自のキー名を作ってはいけません。\n"
+        f"使うキー名: {fields}\n"
+        "mail_type は必須項目です。既存のカテゴリに当てはまらない場合も、"
+        "最も近いカテゴリ名（または「その他」）を必ず文字列で設定してください。"
+    )
+
+
 async def classify_message(db: Session, message: Message, *, force: bool = False) -> ClassificationOutcome:
     settings = get_settings()
     hash_input = content_hash(
@@ -124,7 +141,7 @@ async def classify_message(db: Session, message: Message, *, force: bool = False
         )
 
     active_prompt = get_active_prompt(db, TASK)
-    system_prompt = active_prompt.system_prompt if active_prompt else DEFAULT_SYSTEM_PROMPT
+    system_prompt = (active_prompt.system_prompt if active_prompt else DEFAULT_SYSTEM_PROMPT) + "\n\n" + _required_json_key_instruction()
     user_template = active_prompt.user_prompt_template if active_prompt else DEFAULT_USER_PROMPT_TEMPLATE
     context = build_context(message, anonymize=settings.anonymize_before_send)
     user_prompt = render_template(user_template, context)
