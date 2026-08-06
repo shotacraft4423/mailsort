@@ -325,6 +325,28 @@ export interface PluginInfo {
   is_enabled: boolean;
 }
 
+export interface ContactSummary {
+  id: string;
+  company_id: string | null;
+  company_name: string | null;
+  name: string;
+  email_address: string;
+  phone: string | null;
+  department: string | null;
+  title: string | null;
+  source: string;
+}
+
+export interface ContactTimelineEntry {
+  message_id: string;
+  subject: string;
+  direction: "inbound" | "outbound";
+  folder: string;
+  received_at: string | null;
+  summary: string | null;
+  top_category: string | null;
+}
+
 export const api = {
   listMessages: (folder = "INBOX", limit?: number) =>
     request<MessageSummary[]>(`/mail?folder=${encodeURIComponent(folder)}${limit ? `&limit=${limit}` : ""}`),
@@ -428,4 +450,8 @@ export const api = {
   listPlugins: () => request<PluginInfo[]>("/plugins"),
   updatePlugin: (key: string, input: { is_enabled: boolean; config?: Record<string, string> }) =>
     request<PluginInfo>(`/plugins/${key}`, { method: "PUT", body: JSON.stringify(input) }),
+
+  listContacts: () => request<ContactSummary[]>("/contacts"),
+  getContactTimeline: (id: string) => request<ContactTimelineEntry[]>(`/contacts/${id}/timeline`),
+  summarizeContact: (id: string) => request<{ summary: string }>(`/contacts/${id}/summarize`, { method: "POST" }),
 };

@@ -12,6 +12,7 @@ export const translations = {
     "nav.mail": "メール",
     "nav.dashboard": "ダッシュボード",
     "nav.meetings": "会議",
+    "nav.contacts": "連絡先",
     "nav.admin": "管理",
     "nav.settings": "設定",
 
@@ -249,6 +250,17 @@ export const translations = {
     "ai.noMatchesFound": "候補が見つかりませんでした。",
     "ai.noMeetingsExtracted": "このメールから抽出された会議はまだありません。",
 
+    "contacts.fetchError": "連絡先を取得できませんでした。",
+    "contacts.searchPlaceholder": "名前・会社名・メールアドレスで検索…",
+    "contacts.noCompany": "会社未設定",
+    "contacts.empty": "連絡先はまだありません。メールを受信・分類すると自動的に登録されます。",
+    "contacts.summarize": "AI要約を生成",
+    "contacts.summarizeFailed": "AI要約の生成に失敗しました。設定タブでAPIキー/プロバイダーを確認してください。",
+    "contacts.timelineHeading": "やり取り履歴",
+    "contacts.noHistory": "まだやり取りの記録がありません。",
+    "contacts.directionInbound": "受信",
+    "contacts.directionOutbound": "送信",
+
     // Display labels for values that are sent to the backend as-is (task
     // keys, rule field/operator/action names) — the underlying value never
     // changes with language, only what's shown in the dropdown.
@@ -278,6 +290,7 @@ export const translations = {
     "nav.mail": "Mail",
     "nav.dashboard": "Dashboard",
     "nav.meetings": "Meetings",
+    "nav.contacts": "Contacts",
     "nav.admin": "Admin",
     "nav.settings": "Settings",
 
@@ -514,6 +527,17 @@ export const translations = {
     "ai.desiredLocationUnset": "Desired location not set",
     "ai.noMatchesFound": "No matches found.",
     "ai.noMeetingsExtracted": "No meetings extracted from this message yet.",
+
+    "contacts.fetchError": "Couldn't load contacts.",
+    "contacts.searchPlaceholder": "Search by name, company, or email…",
+    "contacts.noCompany": "No company set",
+    "contacts.empty": "No contacts yet. They're added automatically as mail is received and classified.",
+    "contacts.summarize": "Generate AI summary",
+    "contacts.summarizeFailed": "Failed to generate the summary. Check the API key/provider under Settings.",
+    "contacts.timelineHeading": "Interaction history",
+    "contacts.noHistory": "No interaction history yet.",
+    "contacts.directionInbound": "Received",
+    "contacts.directionOutbound": "Sent",
 
     "task.classification": "Classification (identify deal/candidate type)",
     "task.extraction": "Extraction (structured data: rate, location, etc.)",

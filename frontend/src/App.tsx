@@ -7,11 +7,12 @@ import { DashboardView } from "./components/DashboardView";
 import { SettingsView } from "./components/SettingsView";
 import { AdminView } from "./components/AdminView";
 import { CalendarView } from "./components/CalendarView";
+import { ContactsView } from "./components/ContactsView";
 import { api } from "./api/client";
 import type { MessageDetail, MessageHit, MessageSummary } from "./api/client";
 import { useTranslation } from "./i18n/I18nContext";
 
-type View = "mail" | "dashboard" | "meetings" | "admin" | "settings";
+type View = "mail" | "dashboard" | "meetings" | "contacts" | "admin" | "settings";
 
 export default function App() {
   const { t } = useTranslation();
@@ -230,6 +231,9 @@ export default function App() {
           <button className={view === "meetings" ? "active" : ""} onClick={() => setView("meetings")}>
             {t("nav.meetings")}
           </button>
+          <button className={view === "contacts" ? "active" : ""} onClick={() => setView("contacts")}>
+            {t("nav.contacts")}
+          </button>
           <button className={view === "admin" ? "active" : ""} onClick={() => setView("admin")}>
             {t("nav.admin")}
           </button>
@@ -291,6 +295,7 @@ export default function App() {
 
       {view === "dashboard" && <DashboardView onSelectMessage={openMessageInMail} />}
       {view === "meetings" && <CalendarView />}
+      {view === "contacts" && <ContactsView onSelectMessage={openMessageInMail} />}
       {view === "admin" && <AdminView />}
       {view === "settings" && <SettingsView />}
 

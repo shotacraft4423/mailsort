@@ -42,7 +42,14 @@ from app.providers.llm.local_mock import LocalMockProvider
 from app.providers.llm.registry import get_llm_provider
 from app.schemas.classification import ClassificationResult
 from app.schemas.extraction import ExtractionResult
-from app.services import classification_service, extraction_service, meeting_extraction_service, plugin_manager, rule_engine
+from app.services import (
+    classification_service,
+    company_aggregation_service,
+    extraction_service,
+    meeting_extraction_service,
+    plugin_manager,
+    rule_engine,
+)
 from app.services.feedback_service import build_few_shot_suffix, get_similar_corrections
 from app.services.prompt_service import get_active_prompt, render_template
 
@@ -156,6 +163,12 @@ async def analyze_message(db: Session, message: Message, *, force: bool = False)
 
     _extract_meetings_once(db, message, extraction)
     _route_to_category_folder(db, message, classification, settings)
+    # Populates Company/Contact so the AI panel's 会社情報 tab and the
+    # contacts list have anything to show at all — this existed as a
+    # standalone function with a docstring claiming it ran "after
+    # extraction_service.extract_message succeeds" but nothing in the app
+    # actually called it, so every company/contact tab stayed empty.
+    company_aggregation_service.upsert_company_and_contact(db, message, extraction)
 
     await _run_rules_and_plugins(db, message, analysis, classification)
 
