@@ -49,6 +49,8 @@ export const translations = {
     "reroute.done": "{moved}件のメールを正しいフォルダへ移動しました。",
     "reroute.failed": "再振り分けに失敗しました。",
 
+    "classifyTools.button": "分類ツール",
+
     "reclassifyFallback.button": "オフライン分類のメールをAIで再分類",
     "reclassifyFallback.help": "「⚠ オフライン簡易ルールによるものです」と表示されているメール（現在のフォルダ・アカウント内）だけを対象に、AIへ再問い合わせします。既に正常にAI分類済みのメールは対象外なので、無駄なAPI利用は発生しません。",
     "reclassifyFallback.running": "再分類中…",
@@ -368,6 +370,8 @@ export const translations = {
     "reroute.running": "Re-routing…",
     "reroute.done": "Moved {moved} message(s) to the correct folder.",
     "reroute.failed": "Re-routing failed.",
+
+    "classifyTools.button": "Classify tools",
 
     "reclassifyFallback.button": "Re-classify offline-flagged mail",
     "reclassifyFallback.help": "Re-asks the AI for just the messages currently flagged \"⚠ offline fallback\" in this folder/account. Mail already classified successfully is skipped, so no API usage is wasted.",

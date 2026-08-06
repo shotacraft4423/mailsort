@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FolderList } from "./components/FolderList";
 import { MessageList } from "./components/MessageList";
 import { AIPanel } from "./components/AIPanel";
@@ -51,6 +51,25 @@ export default function App() {
   const [rerouteResultMessage, setRerouteResultMessage] = useState<string | null>(null);
   const [reclassifyingFallback, setReclassifyingFallback] = useState(false);
   const [reclassifyFallbackResultMessage, setReclassifyFallbackResultMessage] = useState<string | null>(null);
+  // The three classify-related actions (bulk classify / re-route / re-run
+  // AI on fallback-only mail) used to sit as separate peer buttons in the
+  // toolbar, each with its own persistent result text next to it — "分類系
+  // のボタン横のメッセージが邪魔です、再分類のボタンもこんなに要らない".
+  // Tucked into one dropdown so the toolbar shows a single entry point;
+  // results only take up space while the menu is open.
+  const [classifyMenuOpen, setClassifyMenuOpen] = useState(false);
+  const classifyMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!classifyMenuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (classifyMenuRef.current && !classifyMenuRef.current.contains(e.target as Node)) {
+        setClassifyMenuOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [classifyMenuOpen]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
@@ -375,36 +394,53 @@ export default function App() {
               )}
             </form>
 
-            <span className="bulk-classify">
-              {!searchResults && (
-                <select value={bulkCount} onChange={(e) => setBulkCount(Number(e.target.value))} disabled={bulkRunning}>
-                  {[50, 100, 200].map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
+            <div className="classify-tools" ref={classifyMenuRef}>
+              <button type="button" className="classify-tools-toggle" onClick={() => setClassifyMenuOpen((v) => !v)}>
+                {t("classifyTools.button")} {classifyMenuOpen ? "▴" : "▾"}
+              </button>
+              {classifyMenuOpen && (
+                <div className="classify-tools-menu">
+                  <div className="classify-tools-row">
+                    {!searchResults && (
+                      <select value={bulkCount} onChange={(e) => setBulkCount(Number(e.target.value))} disabled={bulkRunning}>
+                        {[50, 100, 200].map((n) => (
+                          <option key={n} value={n}>
+                            {n}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <button type="button" onClick={runBulkClassify} disabled={bulkRunning}>
+                      {bulkRunning
+                        ? t("bulkClassify.progress", { done: bulkProgress!.done, total: bulkProgress!.total })
+                        : t("bulkClassify.button")}
+                    </button>
+                  </div>
+                  {!bulkRunning && bulkResultMessage && <p className="classify-tools-result">{bulkResultMessage}</p>}
+
+                  <div className="classify-tools-row">
+                    <button type="button" onClick={runReroute} disabled={rerouting} title={t("reroute.help")}>
+                      {rerouting ? t("reroute.running") : t("reroute.button")}
+                    </button>
+                  </div>
+                  {!rerouting && rerouteResultMessage && <p className="classify-tools-result">{rerouteResultMessage}</p>}
+
+                  <div className="classify-tools-row">
+                    <button
+                      type="button"
+                      onClick={runReclassifyFallback}
+                      disabled={reclassifyingFallback}
+                      title={t("reclassifyFallback.help")}
+                    >
+                      {reclassifyingFallback ? t("reclassifyFallback.running") : t("reclassifyFallback.button")}
+                    </button>
+                  </div>
+                  {!reclassifyingFallback && reclassifyFallbackResultMessage && (
+                    <p className="classify-tools-result">{reclassifyFallbackResultMessage}</p>
+                  )}
+                </div>
               )}
-              <button type="button" onClick={runBulkClassify} disabled={bulkRunning}>
-                {bulkRunning ? t("bulkClassify.progress", { done: bulkProgress!.done, total: bulkProgress!.total }) : t("bulkClassify.button")}
-              </button>
-              {!bulkRunning && bulkResultMessage && <span className="bulk-classify-result">{bulkResultMessage}</span>}
-              <button type="button" onClick={runReroute} disabled={rerouting} title={t("reroute.help")}>
-                {rerouting ? t("reroute.running") : t("reroute.button")}
-              </button>
-              {!rerouting && rerouteResultMessage && <span className="bulk-classify-result">{rerouteResultMessage}</span>}
-              <button
-                type="button"
-                onClick={runReclassifyFallback}
-                disabled={reclassifyingFallback}
-                title={t("reclassifyFallback.help")}
-              >
-                {reclassifyingFallback ? t("reclassifyFallback.running") : t("reclassifyFallback.button")}
-              </button>
-              {!reclassifyingFallback && reclassifyFallbackResultMessage && (
-                <span className="bulk-classify-result">{reclassifyFallbackResultMessage}</span>
-              )}
-            </span>
+            </div>
           </div>
         )}
       </header>

@@ -76,6 +76,81 @@ class ClassificationOutcome:
     from_cache: bool
 
 
+# "そもそも日本語と英語で求めているvalueの対応を用意したほうが確実じゃない
+# かな" — prompt instructions alone are advisory; the model can still write
+# "低" instead of "low" for a Literal field despite being told the exact
+# allowed values (round 2 of the real fallback bug, after round 1's key-name
+# fix: right keys, wrong values — priority="低", temperature="冷たい",
+# sentiment="中立"). This is a deterministic normalization pass applied to
+# every real response *before* validation, so a known Japanese synonym gets
+# coerced to the literal the schema actually requires instead of just
+# hoping the model complies. Falls through unchanged (and still validated
+# normally) for anything not in the table, so it never masks a genuinely
+# new kind of drift — it only fixes the specific aliases seen in practice.
+_ENUM_VALUE_ALIASES: dict[str, str] = {
+    # Priority (priority / urgency fields): urgent / high / normal / low
+    "緊急": "urgent",
+    "至急": "urgent",
+    "急ぎ": "urgent",
+    "高": "high",
+    "高い": "high",
+    "中": "normal",
+    "普通": "normal",
+    "通常": "normal",
+    "中程度": "normal",
+    "低": "low",
+    "低い": "low",
+    # Sentiment: positive / neutral / negative
+    "ポジティブ": "positive",
+    "肯定的": "positive",
+    "好意的": "positive",
+    "中立": "neutral",
+    "ニュートラル": "neutral",
+    "ネガティブ": "negative",
+    "否定的": "negative",
+    # Temperature: hot / warm / cold
+    "熱い": "hot",
+    "ホット": "hot",
+    "温かい": "warm",
+    "暖かい": "warm",
+    "ウォーム": "warm",
+    "冷たい": "cold",
+    "コールド": "cold",
+}
+
+# Required boolean fields (default False, not Optional) that a real model
+# sometimes omits or sends as null instead of an explicit true/false.
+_REQUIRED_BOOLEAN_FIELDS = ("reply_required", "meeting_related", "contract_related", "billing_related")
+
+
+def normalize_classification_payload(raw: dict) -> dict:
+    if not isinstance(raw, dict):
+        return raw
+
+    normalized = dict(raw)
+    schema = ClassificationResult.model_json_schema()
+    for field_name, prop in schema.get("properties", {}).items():
+        allowed = prop.get("enum")
+        if not allowed:
+            continue
+        value = normalized.get(field_name)
+        if isinstance(value, str) and value not in allowed:
+            mapped = _ENUM_VALUE_ALIASES.get(value)
+            if mapped in allowed:
+                normalized[field_name] = mapped
+
+    for field_name in _REQUIRED_BOOLEAN_FIELDS:
+        if normalized.get(field_name) is None:
+            normalized[field_name] = False
+
+    # sales_opportunity is str | None — a model that treats it as a yes/no
+    # question sometimes sends a bare boolean instead of a description.
+    if isinstance(normalized.get("sales_opportunity"), bool):
+        normalized["sales_opportunity"] = None
+
+    return normalized
+
+
 def build_context(message: Message, *, anonymize: bool) -> dict[str, str]:
     """Shared by classification_service and analysis_service (the combined
     classify+extract call) so both send an identically-truncated body —
@@ -108,19 +183,33 @@ def build_context(message: Message, *, anonymize: bool) -> dict[str, str]:
 
 
 def _required_json_key_instruction() -> str:
-    """See analysis_service._required_json_key_instruction's docstring for
-    the full story: without this, a real provider call can succeed and
-    still fail validation 100% of the time because the model invents its
-    own (often Japanese-translated) key names instead of using mail_type
-    etc. verbatim — this is the standalone-classify-endpoint twin of that
-    fix, kept next to ClassificationResult so it can't drift out of sync."""
-    fields = ", ".join(ClassificationResult.model_fields.keys())
+    """Round 1 of this bug (key names translated to Japanese, e.g.
+    「案件か人材か」 instead of mail_type) got fixed by listing field names —
+    but the very next real run hit round 2: right key names, wrong *values*
+    — priority="低" instead of "low", temperature="冷たい" instead of
+    "cold", meeting_related=null instead of false/true. Naming the keys
+    was necessary but not sufficient; the model also needs to see the
+    literal allowed values and a concretely-typed example, not a prose
+    description of "what to determine". Both the example and the enum
+    lists are generated from ClassificationResult itself so neither can
+    drift out of sync with the schema."""
+    example = ClassificationResult(mail_type="（実際の分類名。以下は例です）").model_dump()
+    schema = ClassificationResult.model_json_schema()
+    enum_lines = "\n".join(
+        f"- {name}: {' / '.join(prop['enum'])} のいずれか（日本語や他の表現に言い換えないこと）"
+        for name, prop in schema.get("properties", {}).items()
+        if "enum" in prop
+    )
     return (
         "重要: JSONのキー名は必ず以下の英語のフィールド名をそのまま使用してください。"
         "日本語に意訳したキー名や独自のキー名を作ってはいけません。\n"
-        f"使うキー名: {fields}\n"
+        f"使うキー名: {', '.join(ClassificationResult.model_fields.keys())}\n"
         "mail_type は必須項目です。既存のカテゴリに当てはまらない場合も、"
-        "最も近いカテゴリ名（または「その他」）を必ず文字列で設定してください。"
+        "最も近いカテゴリ名（または「その他」）を必ず文字列で設定してください。\n"
+        "真偽値のフィールド（meeting_related等）は必ず true か false にしてください（nullにしない）。\n"
+        f"以下の項目は必ず指定された値のいずれかにしてください:\n{enum_lines}\n"
+        "出力フォーマットの例（キー名と型のみ参考にしてください。値は実際の内容に置き換えます）:\n"
+        f"{json.dumps(example, ensure_ascii=False)}"
     )
 
 
@@ -153,7 +242,7 @@ async def classify_message(db: Session, message: Message, *, force: bool = False
 
     try:
         raw, _usage = await provider.complete_json(system_prompt=system_prompt, user_prompt=user_prompt)
-        result = ClassificationResult.model_validate(raw)
+        result = ClassificationResult.model_validate(normalize_classification_payload(raw))
     except (LLMProviderError, ValidationError) as exc:
         # Previously discarded entirely — "every mail is being classified
         # by the offline fallback" was undiagnosable from inside the app

@@ -163,7 +163,9 @@ async def analyze_message(db: Session, message: Message, *, force: bool = False)
     fallback_reason: str | None = None
     try:
         raw, _usage = await provider.complete_json(system_prompt=system_prompt, user_prompt=user_prompt)
-        classification = ClassificationResult.model_validate(raw.get("classification") or {})
+        classification = ClassificationResult.model_validate(
+            classification_service.normalize_classification_payload(raw.get("classification") or {})
+        )
         extraction = ExtractionResult.model_validate(raw.get("extraction") or {})
     except (LLMProviderError, ValidationError) as exc:
         # See classification_service.classify_message's matching except
