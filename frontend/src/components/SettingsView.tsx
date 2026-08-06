@@ -21,9 +21,11 @@ function AccountsSection() {
     imap_port: 993,
     smtp_host: "",
     smtp_port: 465,
+    use_ssl: true,
     password: "",
   });
   const [saving, setSaving] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<Record<string, string>>({});
 
   const load = () => api.listAccounts().then(setAccounts).catch(() => setAccounts([]));
 
@@ -48,16 +50,30 @@ function AccountsSection() {
     await load();
   };
 
+  const syncNow = async (id: string) => {
+    setSyncStatus((prev) => ({ ...prev, [id]: "受信中…" }));
+    try {
+      const messages = await api.syncAccount(id, "INBOX");
+      setSyncStatus((prev) => ({ ...prev, [id]: `${messages.length}件の新着メールを取得しました。` }));
+    } catch (err) {
+      setSyncStatus((prev) => ({ ...prev, [id]: err instanceof Error ? err.message : "受信に失敗しました。" }));
+    }
+  };
+
   return (
     <section className="settings-section">
       <h3>メールアカウント</h3>
       <ul className="account-list">
         {accounts.map((a) => (
-          <li key={a.id}>
+          <li key={a.id} className="account-list-row">
             <span>
               {a.display_name} ({a.email_address})
             </span>
-            <button onClick={() => removeAccount(a.id)}>削除</button>
+            <span className="account-list-actions">
+              <button onClick={() => syncNow(a.id)}>今すぐ受信</button>
+              <button onClick={() => removeAccount(a.id)}>削除</button>
+            </span>
+            {syncStatus[a.id] && <p className="reply-status account-sync-status">{syncStatus[a.id]}</p>}
           </li>
         ))}
         {accounts.length === 0 && <li className="ai-empty">登録済みアカウントはありません。</li>}
@@ -74,16 +90,40 @@ function AccountsSection() {
           value={form.email_address}
           onChange={(e) => setForm({ ...form, email_address: e.target.value })}
         />
-        <input
-          placeholder="IMAPホスト"
-          value={form.imap_host}
-          onChange={(e) => setForm({ ...form, imap_host: e.target.value })}
-        />
-        <input
-          placeholder="SMTPホスト"
-          value={form.smtp_host}
-          onChange={(e) => setForm({ ...form, smtp_host: e.target.value })}
-        />
+        <div className="account-form-row">
+          <input
+            placeholder="IMAPホスト（例: imap.gmail.com）"
+            value={form.imap_host}
+            onChange={(e) => setForm({ ...form, imap_host: e.target.value })}
+          />
+          <input
+            type="number"
+            placeholder="IMAPポート"
+            value={form.imap_port}
+            onChange={(e) => setForm({ ...form, imap_port: Number(e.target.value) })}
+          />
+        </div>
+        <div className="account-form-row">
+          <input
+            placeholder="SMTPホスト（例: smtp.gmail.com）"
+            value={form.smtp_host}
+            onChange={(e) => setForm({ ...form, smtp_host: e.target.value })}
+          />
+          <input
+            type="number"
+            placeholder="SMTPポート"
+            value={form.smtp_port}
+            onChange={(e) => setForm({ ...form, smtp_port: Number(e.target.value) })}
+          />
+        </div>
+        <label className="settings-row">
+          <span>SSL/TLSを使用（オフの場合はSTARTTLSを試行。例: SMTP 587番ポートはオフ推奨）</span>
+          <input
+            type="checkbox"
+            checked={form.use_ssl}
+            onChange={(e) => setForm({ ...form, use_ssl: e.target.checked })}
+          />
+        </label>
         <input
           type="password"
           placeholder="パスワード（暗号化して保存されます）"
@@ -94,6 +134,10 @@ function AccountsSection() {
           アカウント追加
         </button>
       </div>
+      <p className="ai-empty">
+        よくあるポート番号: IMAP SSL=993 / SMTP SSL=465 / SMTP STARTTLS=587（587の場合は上のSSL/TLSチェックを外してください）。
+        Gmailは2段階認証を有効にした上で「アプリパスワード」を発行し、通常のパスワード欄にはそちらを入力してください。
+      </p>
     </section>
   );
 }

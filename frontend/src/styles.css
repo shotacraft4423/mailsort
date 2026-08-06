@@ -499,16 +499,55 @@ body {
 
 .account-list li {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 4px;
   padding: 6px 0;
   border-bottom: 1px solid var(--border);
+}
+
+.account-list-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.account-list-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.account-list-actions button {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.account-sync-status {
+  font-size: 12px;
+  margin: 0;
 }
 
 .account-form {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.account-form-row {
+  display: flex;
+  gap: 8px;
+}
+
+.account-form-row input:first-child {
+  flex: 1;
+}
+
+.account-form-row input:last-child {
+  width: 110px;
 }
 
 .account-form input {
