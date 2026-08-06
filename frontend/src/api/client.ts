@@ -349,8 +349,10 @@ export interface ContactTimelineEntry {
 }
 
 export const api = {
-  listMessages: (folder = "INBOX", limit?: number) =>
-    request<MessageSummary[]>(`/mail?folder=${encodeURIComponent(folder)}${limit ? `&limit=${limit}` : ""}`),
+  listMessages: (folder = "INBOX", limit?: number, accountId?: string) =>
+    request<MessageSummary[]>(
+      `/mail?folder=${encodeURIComponent(folder)}${limit ? `&limit=${limit}` : ""}${accountId ? `&account_id=${accountId}` : ""}`
+    ),
   getMessage: (id: string) => request<MessageDetail>(`/mail/${id}`),
   getRelated: (id: string) => request<RelatedData>(`/mail/${id}/related`),
   getAuditLog: (id: string) => request<AuditLogEntry[]>(`/mail/${id}/audit-log`),

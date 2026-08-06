@@ -29,7 +29,15 @@ class EmailAccount(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     # local-only LLM provider regardless of the global default.
     forced_llm_provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
-    messages: Mapped[list["Message"]] = relationship(back_populates="account")
+    # cascade="all, delete-orphan": without it, deleting an account left
+    # SQLAlchemy's default relationship behavior in charge, which tries to
+    # null out Message.account_id on every one of its messages — but that
+    # column is NOT NULL, so deleting any account that had ever synced mail
+    # crashed with an IntegrityError instead of deleting. A locally cached
+    # message with no account it belongs to isn't meaningful to keep
+    # around anyway (the real mail is still on the server; this app only
+    # manages a local view of it).
+    messages: Mapped[list["Message"]] = relationship(back_populates="account", cascade="all, delete-orphan")
 
 
 class Thread(Base, UUIDPrimaryKeyMixin, TimestampMixin):

@@ -66,6 +66,7 @@ export const translations = {
     "messageList.flaggedAria": "フラグ付き",
 
     "folder.aria": "フォルダ",
+    "folder.unifiedHeading": "すべての受信トレイ",
 
     "reply.generateFailed": "AI下書きの生成に失敗しました。手動で入力してください。",
     "reply.draftSaved": "下書きを保存しました。",
@@ -350,6 +351,7 @@ export const translations = {
     "messageList.flaggedAria": "Flagged",
 
     "folder.aria": "Folders",
+    "folder.unifiedHeading": "All inboxes",
 
     "reply.generateFailed": "Failed to generate an AI draft. Please write the reply manually.",
     "reply.draftSaved": "Draft saved.",

@@ -23,11 +23,18 @@ def upsert_company_and_contact(db: Session, message: Message, extraction: Extrac
     domain = _domain_of(message.sender_address)
     name = (extraction.company_name if extraction else None) or (domain or message.sender_address or "不明な会社")
 
+    # .first() rather than .one_or_none(): this is a best-effort upsert
+    # keyed on loosely-derived values (domain, or a name that falls back
+    # to the raw sender address / "不明な会社" when nothing better is
+    # extracted), so two genuinely different messages can easily collide
+    # on the same domain/name — that used to raise MultipleResultsFound
+    # and crash the whole /ai/messages/{id}/analyze call the moment more
+    # than a handful of messages had been aggregated.
     company = None
     if domain:
-        company = db.query(Company).filter(Company.domain == domain).one_or_none()
+        company = db.query(Company).filter(Company.domain == domain).first()
     if company is None:
-        company = db.query(Company).filter(Company.name == name).one_or_none()
+        company = db.query(Company).filter(Company.name == name).first()
     if company is None:
         company = Company(name=name, domain=domain)
         db.add(company)
@@ -40,7 +47,7 @@ def upsert_company_and_contact(db: Session, message: Message, extraction: Extrac
         contact = (
             db.query(Contact)
             .filter(Contact.company_id == company.id, Contact.email_address == message.sender_address)
-            .one_or_none()
+            .first()
         )
         if contact is None:
             contact = Contact(

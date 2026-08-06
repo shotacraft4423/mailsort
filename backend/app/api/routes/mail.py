@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import imaplib
 import json
 from datetime import datetime
 
@@ -294,7 +295,18 @@ async def sync_account(account_id: str, folder: str = "INBOX", limit: int = 50, 
     account = db.query(EmailAccount).filter(EmailAccount.id == account_id).one_or_none()
     if account is None:
         raise HTTPException(status_code=404, detail="account not found")
-    return await sync_service.sync_account(db, account, folder=folder, limit=limit)
+    if not account.imap_host:
+        raise HTTPException(status_code=400, detail="account has no imap_host configured")
+    try:
+        return await sync_service.sync_account(db, account, folder=folder, limit=limit)
+    except (imaplib.IMAP4.error, OSError) as exc:
+        # A real connection failure (bad host/port, wrong credentials, TLS
+        # mismatch, or the server just dropping the connection) used to
+        # propagate as an unhandled 500 with a raw traceback — the "今すぐ
+        # 受信" button just showed a generic network error with nothing the
+        # user could act on, for the exact class of problem (account
+        # misconfiguration) that most needs a clear message.
+        raise HTTPException(status_code=502, detail=f"IMAPサーバーへの接続に失敗しました: {exc}") from exc
 
 
 @router.post("/draft", response_model=MessageOut)

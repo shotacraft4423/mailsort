@@ -101,6 +101,48 @@ body {
   font-weight: 600;
 }
 
+.folder-section-label {
+  padding: 10px 16px 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.folder-account-group {
+  margin-top: 6px;
+  border-top: 1px solid var(--border);
+  padding-top: 4px;
+}
+
+.folder-account-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 8px 16px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-account-chevron {
+  color: var(--text-muted);
+  font-size: 10px;
+  flex: 0 0 auto;
+}
+
+.folder-item-nested {
+  padding-left: 32px;
+}
+
 .message-list {
   list-style: none;
   margin: 0;

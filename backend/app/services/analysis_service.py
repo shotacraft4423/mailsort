@@ -110,10 +110,8 @@ async def analyze_message(db: Session, message: Message, *, force: bool = False)
         # "全部分類したのにフォルダ分けされない" — even though re-running
         # rules/plugins on a cache hit was already correct. Cache hits now
         # get exactly the same side effects a fresh analysis does.
-        _extract_meetings_once(db, message, cached_extraction)
-        _route_to_category_folder(db, message, cached_classification, settings)
-        company_aggregation_service.upsert_company_and_contact(db, message, cached_extraction)
-        await _run_rules_and_plugins(db, message, existing, cached_classification)
+        _apply_post_analysis_side_effects(db, message, cached_classification, cached_extraction, settings)
+        await _run_rules_and_plugins_safely(db, message, existing, cached_classification)
         return AnalysisOutcome(
             analysis=existing,
             classification=cached_classification,
@@ -173,16 +171,13 @@ async def analyze_message(db: Session, message: Message, *, force: bool = False)
     )
     db.commit()
 
-    _extract_meetings_once(db, message, extraction)
-    _route_to_category_folder(db, message, classification, settings)
     # Populates Company/Contact so the AI panel's 会社情報 tab and the
     # contacts list have anything to show at all — this existed as a
     # standalone function with a docstring claiming it ran "after
     # extraction_service.extract_message succeeds" but nothing in the app
     # actually called it, so every company/contact tab stayed empty.
-    company_aggregation_service.upsert_company_and_contact(db, message, extraction)
-
-    await _run_rules_and_plugins(db, message, analysis, classification)
+    _apply_post_analysis_side_effects(db, message, classification, extraction, settings)
+    await _run_rules_and_plugins_safely(db, message, analysis, classification)
 
     return AnalysisOutcome(
         analysis=analysis, classification=classification, extraction=extraction, from_cache=False, is_fallback=is_fallback
@@ -202,6 +197,46 @@ _CATEGORY_FOLDER_MAP = {
     "重要": "重要",
     "迷惑メール": "Junk",
 }
+
+
+def _apply_post_analysis_side_effects(
+    db: Session,
+    message: Message,
+    classification: ClassificationResult,
+    extraction: ExtractionResult,
+    settings: Settings,
+) -> None:
+    """Meeting extraction / folder routing / contact upsert are secondary
+    side effects of a classification, not what the caller (the "AI分類を
+    実行" button, bulk-classify, the sync queue) actually asked for and is
+    waiting on. A bug in any one of them — e.g. company_aggregation_
+    service raising MultipleResultsFound the first time it ever ran at
+    scale against real (messy, duplicate-prone) mail data — used to crash
+    the entire /ai/messages/{id}/analyze call, turning every message that
+    hit it into a hard failure with no classification result at all. Each
+    step is isolated so one failing skips only that step; db.rollback()
+    clears the session's pending-rollback state a caught exception leaves
+    behind, since otherwise the *next* step's first query would also fail
+    with PendingRollbackError even though it has nothing to do with the
+    original error."""
+    for step in (
+        lambda: _extract_meetings_once(db, message, extraction),
+        lambda: _route_to_category_folder(db, message, classification, settings),
+        lambda: company_aggregation_service.upsert_company_and_contact(db, message, extraction),
+    ):
+        try:
+            step()
+        except Exception:  # noqa: BLE001 - best-effort side effect, must never fail the caller
+            db.rollback()
+
+
+async def _run_rules_and_plugins_safely(
+    db: Session, message: Message, analysis: AIAnalysis, classification: ClassificationResult
+) -> None:
+    try:
+        await _run_rules_and_plugins(db, message, analysis, classification)
+    except Exception:  # noqa: BLE001 - same rationale as _apply_post_analysis_side_effects
+        db.rollback()
 
 
 def _route_to_category_folder(db: Session, message: Message, classification: ClassificationResult, settings: Settings) -> None:

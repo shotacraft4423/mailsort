@@ -18,6 +18,9 @@ export default function App() {
   const { t } = useTranslation();
   const [view, setView] = useState<View>("mail");
   const [folder, setFolder] = useState("INBOX");
+  // null = the unified "all accounts" view (existing behavior); set to
+  // filter the mail list down to one account's copy of `folder`.
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedMessage, setSelectedMessage] = useState<MessageDetail | null>(null);
@@ -57,7 +60,7 @@ export default function App() {
 
   const reloadMessages = () => {
     api
-      .listMessages(folder)
+      .listMessages(folder, undefined, selectedAccountId ?? undefined)
       .then((list) => {
         setMessages(list);
         setBackendError(null);
@@ -76,7 +79,12 @@ export default function App() {
       setSelectedMessage(null);
     }
     setSearchResults(null);
-  }, [folder, view]);
+  }, [folder, selectedAccountId, view]);
+
+  const selectFolder = (nextFolder: string, accountId: string | null) => {
+    setFolder(nextFolder);
+    setSelectedAccountId(accountId);
+  };
 
   // Used by the dashboard's clickable reminder items — fetches the message
   // (to learn which folder it's actually in, since a reminder can point at
@@ -87,10 +95,15 @@ export default function App() {
       .getMessage(messageId)
       .then((detail) => {
         setView("mail");
-        if (detail.folder === folder) {
+        // The target message might be in a different account's copy of a
+        // folder than whatever's currently selected — switch to the
+        // unified "all accounts" view so it's guaranteed visible rather
+        // than trying to guess which account-scoped section it lives in.
+        if (detail.folder === folder && selectedAccountId === null) {
           setSelectedId(messageId);
         } else {
           setPendingSelectId(messageId);
+          setSelectedAccountId(null);
           setFolder(detail.folder);
         }
       })
@@ -313,7 +326,7 @@ export default function App() {
 
       {view === "mail" && (
         <div className="app-body">
-          <FolderList active={folder} onSelect={setFolder} />
+          <FolderList active={folder} activeAccountId={selectedAccountId} onSelect={selectFolder} />
           <MessageList messages={displayedMessages} selectedId={selectedId} onSelect={setSelectedId} showAccount={hasMultipleAccounts} />
           <section className="message-detail">
             {selectedMessage ? (
