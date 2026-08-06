@@ -33,6 +33,12 @@ class AIAnalysis(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     summary_detailed: Mapped[str] = mapped_column(Text, default="")
 
     is_fallback: Mapped[bool] = mapped_column(Boolean, default=False)  # produced by offline rule-based classifier
+    # Why is_fallback is True — the LLMProviderError/ValidationError message
+    # from the real provider (e.g. "401 Unauthorized", a timeout, an
+    # unexpected payload shape). Without this, "every mail is falling back
+    # to the offline rules" is undiagnosable from inside the app — the
+    # exception used to just be swallowed. NULL when is_fallback is False.
+    fallback_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     analyzed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

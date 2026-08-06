@@ -71,6 +71,11 @@ async def test_classify_message_falls_back_when_provider_json_does_not_match_sch
 
     assert outcome.analysis.is_fallback is True
     assert outcome.result.mail_type  # LocalMockProvider always fills this in
+    # "すべてがオフライン簡易ルールで振り分けられてる" — this used to be
+    # undiagnosable (the exception was caught and discarded). The reason
+    # must now be on the row so the UI can show it.
+    assert outcome.analysis.fallback_reason
+    assert "mail_type" in outcome.analysis.fallback_reason
 
 
 @pytest.mark.asyncio
@@ -93,3 +98,5 @@ async def test_analyze_message_falls_back_when_provider_json_does_not_match_sche
 
     assert outcome.is_fallback is True
     assert outcome.classification.mail_type
+    assert outcome.analysis.fallback_reason
+    assert "mail_type" in outcome.analysis.fallback_reason

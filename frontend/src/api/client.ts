@@ -64,6 +64,7 @@ export interface MessageDetail extends MessageSummary {
   attachments: AttachmentInfo[];
   is_fallback: boolean;
   provider_used: string | null;
+  fallback_reason: string | null;
 }
 
 export interface DashboardData {

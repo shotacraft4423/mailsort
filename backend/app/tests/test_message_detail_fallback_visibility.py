@@ -39,6 +39,7 @@ def test_get_message_exposes_fallback_flag_and_provider():
                 content_hash="irrelevant",
                 provider_used="local_mock",
                 is_fallback=True,
+                fallback_reason="openai_compatible request failed: 401 Unauthorized",
                 classification_json="{}",
                 extraction_json="{}",
             )
@@ -52,6 +53,7 @@ def test_get_message_exposes_fallback_flag_and_provider():
         body = resp.json()
         assert body["is_fallback"] is True
         assert body["provider_used"] == "local_mock"
+        assert body["fallback_reason"] == "openai_compatible request failed: 401 Unauthorized"
 
 
 def test_get_message_without_analysis_reports_no_fallback():

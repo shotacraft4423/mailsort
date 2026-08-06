@@ -25,7 +25,27 @@ _KEYWORD_RULES: list[tuple[str, float, list[str]]] = [
     # 経歴書/職務経歴 wording) are a stronger, more specific signal than a
     # generic "案件のご紹介" phrase, which can appear in candidate-related
     # mail too (e.g. a reply quoting "ご案件をご紹介いただき...").
-    ("人材紹介", 0.8, ["人材のご紹介", "エンジニアのご紹介", "要員のご紹介", "スキルシート", "経歴書", "職務経歴"]),
+    (
+        "人材紹介",
+        0.8,
+        [
+            "人材のご紹介",
+            "エンジニアのご紹介",
+            "要員のご紹介",
+            "スキルシート",
+            "経歴書",
+            "職務経歴",
+            # A real user-reported miss: a candidate-profile mail (his
+            # skills/experience spelled out under a "■氏名"-style block)
+            # matched none of the phrases above, so it fell through to
+            # 案件紹介 purely because the mail also says "案件をご紹介
+            # いただく際には". These markers are how SES 人材紹介 mail
+            # actually introduces a specific technician in practice.
+            "技術者情報",
+            "■氏名",
+            "要員情報",
+        ],
+    ),
     ("案件紹介", 0.65, ["案件のご紹介", "案件情報", "募集案件", "案件をご紹介"]),
     ("日程調整", 0.6, ["日程調整", "打ち合わせ", "面談日程", "候補日"]),
     ("契約", 0.6, ["契約書", "発注書", "基本契約", "ご契約"]),

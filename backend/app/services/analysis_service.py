@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from dataclasses import dataclass
 
 from pydantic import ValidationError
@@ -52,6 +53,8 @@ from app.services import (
 )
 from app.services.feedback_service import build_few_shot_suffix, get_similar_corrections
 from app.services.prompt_service import get_active_prompt, render_template
+
+logger = logging.getLogger(__name__)
 
 # Matched by LocalMockProvider to return a combined stub shape instead of
 # the plain classification shape — see providers/llm/local_mock.py.
@@ -131,11 +134,19 @@ async def analyze_message(db: Session, message: Message, *, force: bool = False)
 
     provider = get_llm_provider()
     is_fallback = False
+    fallback_reason: str | None = None
     try:
         raw, _usage = await provider.complete_json(system_prompt=system_prompt, user_prompt=user_prompt)
         classification = ClassificationResult.model_validate(raw.get("classification") or {})
         extraction = ExtractionResult.model_validate(raw.get("extraction") or {})
-    except (LLMProviderError, ValidationError):
+    except (LLMProviderError, ValidationError) as exc:
+        # See classification_service.classify_message's matching except
+        # block — same rationale: without this, "every mail is being
+        # classified by the offline fallback" is silent and undiagnosable.
+        # This combined-call path is the one queue.py actually drives on
+        # every synced message, so it's the one that matters most here.
+        logger.warning("analyze_message: %s failed (%s), falling back to local_mock", provider.name, exc)
+        fallback_reason = str(exc)
         provider = LocalMockProvider()
         is_fallback = True
         raw, _usage = await provider.complete_json(system_prompt=system_prompt, user_prompt=user_prompt)
@@ -154,6 +165,7 @@ async def analyze_message(db: Session, message: Message, *, force: bool = False)
     analysis.classification_json = json.dumps(classification.model_dump(), ensure_ascii=False)
     analysis.extraction_json = json.dumps(extraction.model_dump(), ensure_ascii=False)
     analysis.is_fallback = is_fallback
+    analysis.fallback_reason = fallback_reason
     db.flush()
 
     db.add(

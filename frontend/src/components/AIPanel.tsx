@@ -104,6 +104,9 @@ function SummaryTab({ message }: { message: MessageDetail }) {
       {message.is_fallback && (
         <p className="ai-fallback-warning" title={t("ai.fallbackHelp")}>
           {t("ai.fallbackBadge")}
+          {message.fallback_reason && (
+            <span className="ai-fallback-reason"> — {message.fallback_reason}</span>
+          )}
         </p>
       )}
 

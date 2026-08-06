@@ -58,6 +58,7 @@ class MessageDetailOut(MessageOut):
     attachments: list[AttachmentOut] = []
     is_fallback: bool = False
     provider_used: str | None = None
+    fallback_reason: str | None = None
 
 
 class DraftCreate(BaseModel):
@@ -143,6 +144,7 @@ def get_message(message_id: str, db: Session = Depends(get_db)) -> MessageDetail
         attachments=[AttachmentOut.model_validate(a) for a in message.attachments],
         is_fallback=analysis.is_fallback if analysis else False,
         provider_used=analysis.provider_used if analysis else None,
+        fallback_reason=analysis.fallback_reason if analysis else None,
     )
 
 

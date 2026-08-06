@@ -18,6 +18,7 @@ in the UI used to mean before this fix).
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 
 from pydantic import ValidationError
@@ -33,6 +34,8 @@ from app.providers.llm.registry import get_llm_provider
 from app.schemas.classification import ClassificationResult
 from app.services.feedback_service import build_few_shot_suffix, get_similar_corrections
 from app.services.prompt_service import get_active_prompt, render_template, truncate_for_ai
+
+logger = logging.getLogger(__name__)
 
 TASK = "classification"
 
@@ -129,11 +132,20 @@ async def classify_message(db: Session, message: Message, *, force: bool = False
 
     provider = get_llm_provider()
     is_fallback = False
+    fallback_reason: str | None = None
 
     try:
         raw, _usage = await provider.complete_json(system_prompt=system_prompt, user_prompt=user_prompt)
         result = ClassificationResult.model_validate(raw)
-    except (LLMProviderError, ValidationError):
+    except (LLMProviderError, ValidationError) as exc:
+        # Previously discarded entirely — "every mail is being classified
+        # by the offline fallback" was undiagnosable from inside the app
+        # (no error, no log, nothing). Logging it server-side covers anyone
+        # watching the process console; storing it on the row is what lets
+        # the UI show *why* next to the fallback badge (bad/expired key,
+        # rate limit, timeout, quota exhausted, unexpected response shape).
+        logger.warning("classification: %s failed (%s), falling back to local_mock", provider.name, exc)
+        fallback_reason = str(exc)
         provider = LocalMockProvider()
         is_fallback = True
         raw, _usage = await provider.complete_json(system_prompt=system_prompt, user_prompt=user_prompt)
@@ -150,6 +162,7 @@ async def classify_message(db: Session, message: Message, *, force: bool = False
     analysis.prompt_template_id = active_prompt.template_id if active_prompt else None
     analysis.classification_json = json.dumps(result.model_dump(), ensure_ascii=False)
     analysis.is_fallback = is_fallback
+    analysis.fallback_reason = fallback_reason
     db.flush()
 
     db.add(
