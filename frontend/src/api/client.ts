@@ -78,9 +78,9 @@ export interface DashboardData {
 
 export interface RemindersData {
   overdue_replies: { message_id: string; subject: string; sender_address: string; received_at: string; hours_overdue: number }[];
-  upcoming_meetings: { id: string; title: string; platform: string; starts_at: string }[];
-  expiring_deals: { id: string; title: string; reply_deadline: string; days_overdue: number }[];
-  recommended_actions: { kind: string; label: string; ref_id: string; urgency_score: number }[];
+  upcoming_meetings: { id: string; title: string; platform: string; starts_at: string; source_message_id: string | null }[];
+  expiring_deals: { id: string; title: string; reply_deadline: string; days_overdue: number; source_message_id: string | null }[];
+  recommended_actions: { kind: string; label: string; ref_id: string; urgency_score: number; message_id: string | null }[];
 }
 
 export interface AccountSummary {
@@ -183,8 +183,10 @@ export interface MeetingSummary {
   platform: string;
   join_url: string;
   starts_at: string | null;
+  ends_at: string | null;
   is_rescheduled: boolean;
   supersedes_meeting_id: string | null;
+  is_hidden: boolean;
 }
 
 export interface MessageHit {
@@ -386,7 +388,10 @@ export const api = {
 
   listDeals: () => request<DealSummary[]>("/deals"),
   listCandidates: () => request<CandidateSummary[]>("/candidates"),
-  listMeetings: () => request<MeetingSummary[]>("/meetings"),
+  listMeetings: (includeHidden = false) =>
+    request<MeetingSummary[]>(`/meetings${includeHidden ? "?include_hidden=true" : ""}`),
+  updateMeeting: (id: string, input: { is_hidden: boolean }) =>
+    request<MeetingSummary>(`/meetings/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
 
   search: (q: string) => request<MessageHit[]>(`/search?q=${encodeURIComponent(q)}`),
   searchNatural: (q: string) => request<MessageHit[]>(`/search/natural?q=${encodeURIComponent(q)}`),

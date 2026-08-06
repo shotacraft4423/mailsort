@@ -87,6 +87,7 @@ class UpcomingMeetingOut(BaseModel):
     title: str
     platform: str
     starts_at: datetime
+    source_message_id: str | None = None
 
 
 class ExpiringDealOut(BaseModel):
@@ -94,6 +95,7 @@ class ExpiringDealOut(BaseModel):
     title: str
     reply_deadline: str
     days_overdue: int
+    source_message_id: str | None = None
 
 
 class RecommendedActionOut(BaseModel):
@@ -101,6 +103,7 @@ class RecommendedActionOut(BaseModel):
     label: str
     ref_id: str
     urgency_score: float
+    message_id: str | None = None
 
 
 class RemindersOut(BaseModel):

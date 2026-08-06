@@ -456,6 +456,17 @@ body {
   gap: 2px;
 }
 
+.recommended-actions li.clickable,
+.reminder-list li.clickable {
+  cursor: pointer;
+}
+
+.recommended-actions li.clickable:hover,
+.reminder-list li.clickable:hover {
+  border-color: var(--accent);
+  background: var(--bg-secondary);
+}
+
 /* Calendar / agenda view */
 
 .calendar-view h3 {
@@ -505,6 +516,29 @@ body {
 .agenda-link {
   color: var(--accent);
   font-size: 12px;
+}
+
+.agenda-hide-button {
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.calendar-hidden-toggle {
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
 }
 
 /* Settings */

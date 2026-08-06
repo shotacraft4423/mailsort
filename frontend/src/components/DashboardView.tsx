@@ -5,7 +5,11 @@ import { useTranslation } from "../i18n/I18nContext";
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 
-export function DashboardView() {
+interface Props {
+  onSelectMessage: (messageId: string) => void;
+}
+
+export function DashboardView({ onSelectMessage }: Props) {
   const { t } = useTranslation();
   const [data, setData] = useState<DashboardData | null>(null);
   const [reminders, setReminders] = useState<RemindersData | null>(null);
@@ -46,7 +50,11 @@ export function DashboardView() {
           <h3>{t("dashboard.recommendedOrder")}</h3>
           <ol className="recommended-actions">
             {reminders.recommended_actions.map((a) => (
-              <li key={`${a.kind}-${a.ref_id}`}>
+              <li
+                key={`${a.kind}-${a.ref_id}`}
+                className={a.message_id ? "clickable" : undefined}
+                onClick={a.message_id ? () => onSelectMessage(a.message_id!) : undefined}
+              >
                 <span className={`task-badge action-kind-${a.kind}`}>
                   {a.kind === "reply" ? t("dashboard.actionReply") : a.kind === "deal" ? t("dashboard.actionDeal") : t("dashboard.actionMeeting")}
                 </span>
@@ -85,7 +93,7 @@ export function DashboardView() {
             ) : (
               <ul className="reminder-list">
                 {reminders.overdue_replies.map((r) => (
-                  <li key={r.message_id}>
+                  <li key={r.message_id} className="clickable" onClick={() => onSelectMessage(r.message_id)}>
                     <strong>{r.subject || t("common.noSubject")}</strong>
                     <span className="related-list-meta">
                       {t("dashboard.hoursOverdue", { sender: r.sender_address, hours: Math.round(r.hours_overdue) })}
@@ -103,7 +111,11 @@ export function DashboardView() {
             ) : (
               <ul className="reminder-list">
                 {reminders.expiring_deals.map((d) => (
-                  <li key={d.id}>
+                  <li
+                    key={d.id}
+                    className={d.source_message_id ? "clickable" : undefined}
+                    onClick={d.source_message_id ? () => onSelectMessage(d.source_message_id!) : undefined}
+                  >
                     <strong>{d.title}</strong>
                     <span className="related-list-meta">
                       {t("dashboard.replyDeadlineOverdue", { deadline: d.reply_deadline, days: d.days_overdue })}
@@ -121,7 +133,11 @@ export function DashboardView() {
             ) : (
               <ul className="reminder-list">
                 {reminders.upcoming_meetings.map((m) => (
-                  <li key={m.id}>
+                  <li
+                    key={m.id}
+                    className={m.source_message_id ? "clickable" : undefined}
+                    onClick={m.source_message_id ? () => onSelectMessage(m.source_message_id!) : undefined}
+                  >
                     <strong>{m.title || t("common.noSubject")}</strong>
                     <span className="related-list-meta">
                       {m.platform.toUpperCase()} / {new Date(m.starts_at).toLocaleString("ja-JP")}

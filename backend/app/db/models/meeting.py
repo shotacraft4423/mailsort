@@ -27,3 +27,6 @@ class Meeting(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     participants_json: Mapped[str] = mapped_column(Text, default="[]")
     is_rescheduled: Mapped[bool] = mapped_column(Boolean, default=False)
     supersedes_meeting_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("meetings.id"), nullable=True)
+    # "参加しなくていい会議" — dismissed from the calendar/agenda view without
+    # deleting the row (keeps the source_message_id link + history intact).
+    is_hidden: Mapped[bool] = mapped_column(Boolean, default=False)

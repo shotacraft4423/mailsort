@@ -7,20 +7,31 @@ export function CalendarView() {
   const { t } = useTranslation();
   const [meetings, setMeetings] = useState<MeetingSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showHidden, setShowHidden] = useState(false);
 
-  useEffect(() => {
+  const load = (includeHidden: boolean) =>
     api
-      .listMeetings()
+      .listMeetings(includeHidden)
       .then(setMeetings)
       .catch(() => setError(t("calendar.fetchError")));
-  }, []);
+
+  useEffect(() => {
+    load(showHidden);
+  }, [showHidden]);
+
+  const toggleHidden = async (meeting: MeetingSummary) => {
+    await api.updateMeeting(meeting.id, { is_hidden: !meeting.is_hidden });
+    load(showHidden);
+  };
 
   if (error) return <div className="view-container">{error}</div>;
   if (!meetings) return <div className="view-container">{t("common.loading")}</div>;
 
+  const visible = meetings.filter((m) => !m.is_hidden);
+  const hiddenCount = meetings.filter((m) => m.is_hidden).length;
   const now = Date.now();
-  const withDate = meetings.filter((m) => m.starts_at);
-  const undated = meetings.filter((m) => !m.starts_at);
+  const withDate = visible.filter((m) => m.starts_at);
+  const undated = visible.filter((m) => !m.starts_at);
   const upcoming = withDate.filter((m) => new Date(m.starts_at!).getTime() >= now).sort(byDateAsc);
   const past = withDate.filter((m) => new Date(m.starts_at!).getTime() < now).sort(byDateDesc);
 
@@ -29,21 +40,35 @@ export function CalendarView() {
       <h2>{t("nav.meetings")}</h2>
 
       <h3>{t("calendar.upcoming", { count: upcoming.length })}</h3>
-      {upcoming.length === 0 ? <p className="ai-empty">{t("calendar.noUpcoming")}</p> : <AgendaGroups meetings={upcoming} />}
+      {upcoming.length === 0 ? (
+        <p className="ai-empty">{t("calendar.noUpcoming")}</p>
+      ) : (
+        <AgendaGroups meetings={upcoming} onToggleHidden={toggleHidden} />
+      )}
 
       {undated.length > 0 && (
         <>
           <h3>{t("calendar.undated", { count: undated.length })}</h3>
           <ul className="agenda-list">
             {undated.map((m) => (
-              <MeetingRow key={m.id} meeting={m} />
+              <MeetingRow key={m.id} meeting={m} onToggleHidden={toggleHidden} />
             ))}
           </ul>
         </>
       )}
 
       <h3>{t("calendar.past", { count: past.length })}</h3>
-      {past.length === 0 ? <p className="ai-empty">{t("calendar.noPast")}</p> : <AgendaGroups meetings={past} />}
+      {past.length === 0 ? (
+        <p className="ai-empty">{t("calendar.noPast")}</p>
+      ) : (
+        <AgendaGroups meetings={past} onToggleHidden={toggleHidden} />
+      )}
+
+      {(hiddenCount > 0 || showHidden) && (
+        <button type="button" className="calendar-hidden-toggle" onClick={() => setShowHidden((v) => !v)}>
+          {showHidden ? t("calendar.hideHidden") : t("calendar.showHidden", { count: hiddenCount })}
+        </button>
+      )}
     </div>
   );
 }
@@ -56,7 +81,12 @@ function byDateDesc(a: MeetingSummary, b: MeetingSummary) {
   return new Date(b.starts_at!).getTime() - new Date(a.starts_at!).getTime();
 }
 
-function AgendaGroups({ meetings }: { meetings: MeetingSummary[] }) {
+interface AgendaGroupsProps {
+  meetings: MeetingSummary[];
+  onToggleHidden: (meeting: MeetingSummary) => void;
+}
+
+function AgendaGroups({ meetings, onToggleHidden }: AgendaGroupsProps) {
   const groups = new Map<string, MeetingSummary[]>();
   for (const meeting of meetings) {
     const dateKey = new Date(meeting.starts_at!).toLocaleDateString("ja-JP", {
@@ -77,7 +107,7 @@ function AgendaGroups({ meetings }: { meetings: MeetingSummary[] }) {
           <div className="agenda-day-label">{dateKey}</div>
           <ul className="agenda-list">
             {dayMeetings.map((m) => (
-              <MeetingRow key={m.id} meeting={m} />
+              <MeetingRow key={m.id} meeting={m} onToggleHidden={onToggleHidden} />
             ))}
           </ul>
         </div>
@@ -86,7 +116,7 @@ function AgendaGroups({ meetings }: { meetings: MeetingSummary[] }) {
   );
 }
 
-function MeetingRow({ meeting }: { meeting: MeetingSummary }) {
+function MeetingRow({ meeting, onToggleHidden }: { meeting: MeetingSummary; onToggleHidden: (meeting: MeetingSummary) => void }) {
   const { t } = useTranslation();
   return (
     <li className="agenda-row">
@@ -98,11 +128,15 @@ function MeetingRow({ meeting }: { meeting: MeetingSummary }) {
       )}
       <span className="agenda-title">{meeting.title || t("common.noSubject")}</span>
       {meeting.is_rescheduled && <span className="badge-reschedule">{t("calendar.rescheduled")}</span>}
+      {meeting.is_hidden && <span className="badge-reschedule">{t("calendar.hiddenBadge")}</span>}
       {meeting.join_url && (
         <a href={meeting.join_url} target="_blank" rel="noreferrer" className="agenda-link">
           {t("calendar.joinLink")}
         </a>
       )}
+      <button type="button" className="agenda-hide-button" onClick={() => onToggleHidden(meeting)}>
+        {meeting.is_hidden ? t("calendar.unhide") : t("calendar.hide")}
+      </button>
     </li>
   );
 }

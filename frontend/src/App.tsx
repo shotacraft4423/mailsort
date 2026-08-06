@@ -31,6 +31,12 @@ export default function App() {
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number; failed: number } | null>(null);
   const [bulkResultMessage, setBulkResultMessage] = useState<string | null>(null);
   const bulkRunning = bulkProgress !== null && bulkProgress.done < bulkProgress.total;
+  // Set right before switching `folder` when navigating to a message that
+  // lives in a different folder than the one currently shown (e.g. from a
+  // dashboard reminder) — the [folder, view] effect below consumes it
+  // instead of unconditionally clearing the selection, which is what it
+  // does for a normal user-initiated folder switch.
+  const [pendingSelectId, setPendingSelectId] = useState<string | null>(null);
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
@@ -49,10 +55,37 @@ export default function App() {
   useEffect(() => {
     if (view !== "mail") return;
     reloadMessages();
-    setSelectedId(null);
-    setSelectedMessage(null);
+    if (pendingSelectId) {
+      setSelectedId(pendingSelectId);
+      setPendingSelectId(null);
+    } else {
+      setSelectedId(null);
+      setSelectedMessage(null);
+    }
     setSearchResults(null);
   }, [folder, view]);
+
+  // Used by the dashboard's clickable reminder items — fetches the message
+  // (to learn which folder it's actually in, since a reminder can point at
+  // mail outside the currently selected folder) and switches to the mail
+  // view with it selected.
+  const openMessageInMail = (messageId: string) => {
+    api
+      .getMessage(messageId)
+      .then((detail) => {
+        setView("mail");
+        if (detail.folder === folder) {
+          setSelectedId(messageId);
+        } else {
+          setPendingSelectId(messageId);
+          setFolder(detail.folder);
+        }
+      })
+      .catch(() => {
+        // Stale reminder (message deleted/moved since the dashboard was
+        // loaded) — nothing to navigate to.
+      });
+  };
 
   useEffect(() => {
     if (!selectedId) return;
@@ -234,7 +267,7 @@ export default function App() {
         </button>
       </header>
 
-      {view === "dashboard" && <DashboardView />}
+      {view === "dashboard" && <DashboardView onSelectMessage={openMessageInMail} />}
       {view === "meetings" && <CalendarView />}
       {view === "admin" && <AdminView />}
       {view === "settings" && <SettingsView />}

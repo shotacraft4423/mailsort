@@ -87,6 +87,11 @@ export const translations = {
     "calendar.noPast": "履歴はありません。",
     "calendar.rescheduled": "再設定",
     "calendar.joinLink": "参加リンク",
+    "calendar.hide": "非表示にする",
+    "calendar.unhide": "表示に戻す",
+    "calendar.showHidden": "非表示の会議を表示 ({count})",
+    "calendar.hideHidden": "非表示の会議を隠す",
+    "calendar.hiddenBadge": "非表示",
 
     "dashboard.fetchError": "ダッシュボードを取得できませんでした。",
     "dashboard.dealsToday": "今日届いた案件",
@@ -346,6 +351,11 @@ export const translations = {
     "calendar.noPast": "No history.",
     "calendar.rescheduled": "Rescheduled",
     "calendar.joinLink": "Join link",
+    "calendar.hide": "Hide",
+    "calendar.unhide": "Unhide",
+    "calendar.showHidden": "Show hidden meetings ({count})",
+    "calendar.hideHidden": "Hide the hidden meetings",
+    "calendar.hiddenBadge": "Hidden",
 
     "dashboard.fetchError": "Couldn't load the dashboard.",
     "dashboard.dealsToday": "Deals today",

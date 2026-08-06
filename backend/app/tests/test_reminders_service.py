@@ -132,6 +132,42 @@ def test_meeting_outside_window_is_excluded(db_session):
     assert reminders.upcoming_meetings == []
 
 
+def test_hidden_meeting_is_excluded_from_upcoming_reminders(db_session):
+    db_session.add(
+        Meeting(
+            title="非表示にした会議",
+            platform="zoom",
+            join_url="https://zoom.example/hidden",
+            starts_at=datetime.utcnow() + timedelta(days=2),
+            is_hidden=True,
+        )
+    )
+    db_session.commit()
+
+    reminders = compute_reminders(db_session, upcoming_meeting_days=7)
+    assert reminders.upcoming_meetings == []
+
+
+def test_upcoming_meeting_carries_source_message_id_for_dashboard_click_through(db_session):
+    account = _account(db_session)
+    message = Message(account_id=account.id, message_uid="1", subject="MTG案内", sender_address="a@b.com")
+    db_session.add(message)
+    db_session.flush()
+    db_session.add(
+        Meeting(
+            title="キックオフ",
+            platform="teams",
+            join_url="https://teams.example/x",
+            starts_at=datetime.utcnow() + timedelta(days=2),
+            source_message_id=message.id,
+        )
+    )
+    db_session.commit()
+
+    reminders = compute_reminders(db_session, upcoming_meeting_days=7)
+    assert reminders.upcoming_meetings[0].source_message_id == message.id
+
+
 def test_expiring_deal_with_passed_reply_deadline_is_flagged(db_session):
     db_session.add(
         Deal(title="Java案件", status="open", reply_deadline=(datetime.utcnow() - timedelta(days=3)).date())
@@ -141,6 +177,25 @@ def test_expiring_deal_with_passed_reply_deadline_is_flagged(db_session):
     reminders = compute_reminders(db_session)
     assert len(reminders.expiring_deals) == 1
     assert reminders.expiring_deals[0].days_overdue == 3
+
+
+def test_expiring_deal_carries_source_message_id_for_dashboard_click_through(db_session):
+    account = _account(db_session)
+    message = Message(account_id=account.id, message_uid="1", subject="案件のご紹介", sender_address="a@b.com")
+    db_session.add(message)
+    db_session.flush()
+    db_session.add(
+        Deal(
+            title="Java案件",
+            status="open",
+            reply_deadline=(datetime.utcnow() - timedelta(days=3)).date(),
+            source_message_id=message.id,
+        )
+    )
+    db_session.commit()
+
+    reminders = compute_reminders(db_session)
+    assert reminders.expiring_deals[0].source_message_id == message.id
 
 
 def test_closed_deal_is_not_flagged_as_expiring(db_session):

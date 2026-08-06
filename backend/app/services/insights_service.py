@@ -112,6 +112,7 @@ class UpcomingMeeting:
     title: str
     platform: str
     starts_at: datetime
+    source_message_id: str | None = None
 
 
 @dataclass
@@ -120,6 +121,7 @@ class ExpiringDeal:
     title: str
     reply_deadline: str
     days_overdue: int
+    source_message_id: str | None = None
 
 
 @dataclass
@@ -128,6 +130,11 @@ class RecommendedAction:
     label: str
     ref_id: str
     urgency_score: float
+    # Lets the dashboard jump straight to the originating email regardless
+    # of kind — reply items' ref_id already *is* a message_id, but
+    # deal/meeting items' ref_id is a Deal/Meeting id, which the mail view
+    # has no route for.
+    message_id: str | None = None
 
 
 @dataclass
@@ -195,13 +202,19 @@ def compute_reminders(
     window_end = now + timedelta(days=upcoming_meeting_days)
     meetings = (
         db.query(Meeting)
-        .filter(Meeting.starts_at.isnot(None), Meeting.starts_at >= now, Meeting.starts_at <= window_end)
+        .filter(
+            Meeting.starts_at.isnot(None),
+            Meeting.starts_at >= now,
+            Meeting.starts_at <= window_end,
+            Meeting.is_hidden.is_(False),
+        )
         .order_by(Meeting.starts_at.asc())
         .limit(limit)
         .all()
     )
     upcoming_meetings = [
-        UpcomingMeeting(id=m.id, title=m.title, platform=m.platform, starts_at=m.starts_at) for m in meetings
+        UpcomingMeeting(id=m.id, title=m.title, platform=m.platform, starts_at=m.starts_at, source_message_id=m.source_message_id)
+        for m in meetings
     ]
 
     today = now.date()
@@ -210,7 +223,11 @@ def compute_reminders(
     )
     expiring_deals = [
         ExpiringDeal(
-            id=d.id, title=d.title, reply_deadline=d.reply_deadline.isoformat(), days_overdue=(today - d.reply_deadline).days
+            id=d.id,
+            title=d.title,
+            reply_deadline=d.reply_deadline.isoformat(),
+            days_overdue=(today - d.reply_deadline).days,
+            source_message_id=d.source_message_id,
         )
         for d in open_deals
     ]
@@ -220,11 +237,19 @@ def compute_reminders(
     recommended: list[RecommendedAction] = []
     for r in overdue_replies:
         recommended.append(
-            RecommendedAction(kind="reply", label=f"「{r.subject}」への返信", ref_id=r.message_id, urgency_score=r.hours_overdue)
+            RecommendedAction(
+                kind="reply", label=f"「{r.subject}」への返信", ref_id=r.message_id, urgency_score=r.hours_overdue, message_id=r.message_id
+            )
         )
     for d in expiring_deals:
         recommended.append(
-            RecommendedAction(kind="deal", label=f"案件「{d.title}」の返信期限切れ", ref_id=d.id, urgency_score=d.days_overdue * 24)
+            RecommendedAction(
+                kind="deal",
+                label=f"案件「{d.title}」の返信期限切れ",
+                ref_id=d.id,
+                urgency_score=d.days_overdue * 24,
+                message_id=d.source_message_id,
+            )
         )
     for m in upcoming_meetings:
         hours_until = (m.starts_at - now).total_seconds() / 3600
@@ -234,6 +259,7 @@ def compute_reminders(
                 label=f"会議「{m.title}」",
                 ref_id=m.id,
                 urgency_score=max(0.0, upcoming_meeting_days * 24 - hours_until),
+                message_id=m.source_message_id,
             )
         )
     recommended.sort(key=lambda a: a.urgency_score, reverse=True)
