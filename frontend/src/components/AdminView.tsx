@@ -34,7 +34,14 @@ export function AdminView() {
 // Underlying values sent to the backend never change with display
 // language — only the label shown in the dropdown does (see
 // translations.ts "task.*" / "ruleField.*" / "ruleOperator.*" / "actionType.*").
-const TASKS = ["classification", "extraction", "summary", "reply_suggestion", "duplicate_check", "chat"];
+//
+// Limited to the two tasks the pipeline actually reads a PromptTemplate
+// for (see backend/app/api/routes/prompts.py's _DEFAULTS_BY_TASK comment).
+// summary/reply_suggestion/duplicate_check/chat used to be selectable here
+// too, but creating a template for them did nothing — no service ever
+// calls get_active_prompt() for those tasks — which is exactly the kind of
+// "what do I even put here" confusion this screen should not produce.
+const TASKS = ["classification", "extraction"];
 
 function PromptsPanel() {
   const { t } = useTranslation();
@@ -60,6 +67,16 @@ function PromptsPanel() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const fillFromDefault = async () => {
+    const defaults = await api.getPromptDefaults(form.task);
+    setForm({ ...form, system_prompt: defaults.system_prompt, user_prompt_template: defaults.user_prompt_template });
+  };
+
+  const deleteTemplate = async (templateId: string) => {
+    await api.deletePrompt(templateId);
+    await load();
   };
 
   const startEditVersion = (template: PromptTemplate) => {
@@ -96,6 +113,7 @@ function PromptsPanel() {
               <button onClick={() => (expanded === tpl.id ? setExpanded(null) : startEditVersion(tpl))}>
                 {expanded === tpl.id ? t("common.close") : t("admin.addVersion")}
               </button>
+              <button onClick={() => deleteTemplate(tpl.id)}>{t("admin.deleteTemplate")}</button>
             </div>
             {expanded === tpl.id && (
               <div className="prompt-version-form">
@@ -142,6 +160,9 @@ function PromptsPanel() {
             ))}
           </select>
         </label>
+        <button type="button" onClick={fillFromDefault} disabled={saving}>
+          {t("admin.fillFromDefault")}
+        </button>
         <textarea
           rows={3}
           placeholder={t("admin.systemPromptLabel")}

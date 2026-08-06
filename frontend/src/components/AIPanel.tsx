@@ -67,6 +67,7 @@ function SummaryTab({ message }: { message: MessageDetail }) {
   const [level, setLevel] = useState<"3line" | "10line" | "detailed">("3line");
   const [summary, setSummary] = useState(message.summary_3line ?? "");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [correctedType, setCorrectedType] = useState<string | null>(null);
 
   const categories = (message.classification?.categories as { label: string; confidence: number }[] | undefined) ?? [];
@@ -77,9 +78,12 @@ function SummaryTab({ message }: { message: MessageDetail }) {
   const runSummarize = async (nextLevel: typeof level) => {
     setLevel(nextLevel);
     setLoading(true);
+    setError(null);
     try {
       const result = await api.summarize(message.id, nextLevel);
       setSummary(result.summary);
+    } catch {
+      setError(t("ai.summarizeFailed"));
     } finally {
       setLoading(false);
     }
@@ -95,6 +99,7 @@ function SummaryTab({ message }: { message: MessageDetail }) {
         ))}
       </div>
       <p className="summary-text">{loading ? t("common.generating") : summary || t("ai.noSummaryYet")}</p>
+      {error && <p className="reply-status">{error}</p>}
 
       {displayCategories.length > 0 && (
         <div className="category-tags">

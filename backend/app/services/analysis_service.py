@@ -26,12 +26,13 @@ from app.core.config import get_settings
 from app.core.security import content_hash
 from app.db.models.ai import AIAnalysis, AuditLogEntry
 from app.db.models.email import Message
+from app.db.models.meeting import Meeting
 from app.providers.llm.base import LLMProviderError
 from app.providers.llm.local_mock import LocalMockProvider
 from app.providers.llm.registry import get_llm_provider
 from app.schemas.classification import ClassificationResult
 from app.schemas.extraction import ExtractionResult
-from app.services import classification_service, extraction_service, plugin_manager, rule_engine
+from app.services import classification_service, extraction_service, meeting_extraction_service, plugin_manager, rule_engine
 from app.services.feedback_service import build_few_shot_suffix, get_similar_corrections
 from app.services.prompt_service import get_active_prompt, render_template
 
@@ -142,11 +143,27 @@ async def analyze_message(db: Session, message: Message, *, force: bool = False)
     )
     db.commit()
 
+    _extract_meetings_once(db, message, extraction)
+
     await _run_rules_and_plugins(db, message, analysis, classification)
 
     return AnalysisOutcome(
         analysis=analysis, classification=classification, extraction=extraction, from_cache=False, is_fallback=is_fallback
     )
+
+
+def _extract_meetings_once(db: Session, message: Message, extraction: ExtractionResult) -> None:
+    """meeting_extraction_service.extract_meetings() existed (with a regex
+    fallback specifically so meeting links are "never missed just because
+    AI is off") but was never called from anywhere in the app — the
+    meeting calendar/agenda view and the AI panel's meeting tab were always
+    empty regardless of how many Teams/Zoom/Meet links a synced email
+    actually contained. Guarded by an existence check since analyze_message
+    can re-run for the same message (force=True), and extract_meetings
+    itself has no per-message idempotency of its own."""
+    already_extracted = db.query(Meeting).filter(Meeting.source_message_id == message.id).first() is not None
+    if not already_extracted:
+        meeting_extraction_service.extract_meetings(db, message, extraction)
 
 
 async def _run_rules_and_plugins(

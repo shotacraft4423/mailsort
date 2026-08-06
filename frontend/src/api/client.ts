@@ -255,6 +255,12 @@ export interface PromptTemplate {
   versions: PromptVersion[];
 }
 
+export interface PromptDefaults {
+  task: string;
+  system_prompt: string;
+  user_prompt_template: string;
+}
+
 export interface RuleCondition {
   field: string;
   operator: string;
@@ -386,12 +392,14 @@ export const api = {
   searchNatural: (q: string) => request<MessageHit[]>(`/search/natural?q=${encodeURIComponent(q)}`),
 
   listPrompts: () => request<PromptTemplate[]>("/prompts"),
+  getPromptDefaults: (task: string) => request<PromptDefaults>(`/prompts/defaults?task=${encodeURIComponent(task)}`),
   createPrompt: (input: { name: string; task: string; system_prompt: string; user_prompt_template: string }) =>
     request<PromptTemplate>("/prompts", { method: "POST", body: JSON.stringify(input) }),
   addPromptVersion: (
     templateId: string,
     input: { system_prompt: string; user_prompt_template: string; notes?: string; activate?: boolean }
   ) => request<PromptVersion>(`/prompts/${templateId}/versions`, { method: "POST", body: JSON.stringify(input) }),
+  deletePrompt: (templateId: string) => request<{ status: string }>(`/prompts/${templateId}`, { method: "DELETE" }),
 
   listRules: () => request<Rule[]>("/rules"),
   createRule: (input: { name: string; priority?: number; match_mode?: string; conditions: RuleCondition[]; actions: RuleAction[] }) =>

@@ -27,6 +27,7 @@ export default function App() {
   const [searchResults, setSearchResults] = useState<MessageHit[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [classifying, setClassifying] = useState(false);
+  const [classifyError, setClassifyError] = useState<string | null>(null);
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
@@ -63,6 +64,7 @@ export default function App() {
       })
       .catch(() => setSelectedMessage(null));
     setReplying(false);
+    setClassifyError(null);
   }, [selectedId]);
 
   useEffect(() => {
@@ -90,9 +92,12 @@ export default function App() {
   const runClassify = async () => {
     if (!selectedId) return;
     setClassifying(true);
+    setClassifyError(null);
     try {
       await api.analyze(selectedId);
       setSelectedMessage(await api.getMessage(selectedId));
+    } catch {
+      setClassifyError(t("detail.classifyFailed"));
     } finally {
       setClassifying(false);
     }
@@ -236,6 +241,7 @@ export default function App() {
                     <button onClick={() => moveToFolder("Archive")}>{t("detail.archive")}</button>
                     <button onClick={() => moveToFolder("Trash")}>{t("common.delete")}</button>
                   </div>
+                  {classifyError && <p className="reply-status">{classifyError}</p>}
                   <p className="detail-meta">
                     {selectedMessage.sender_name} &lt;{selectedMessage.sender_address}&gt;
                   </p>

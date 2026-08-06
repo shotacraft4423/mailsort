@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -29,12 +31,44 @@ from app.db.session import init_db
 from app.services.settings_service import load_persisted_settings
 
 
+_QUEUE_POLL_IDLE_SECONDS = 2.0
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     init_db()
     _load_persisted_settings()
     _load_enabled_plugins()
-    yield
+    worker_task = asyncio.create_task(_run_queue_worker())
+    try:
+        yield
+    finally:
+        worker_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await worker_task
+
+
+async def _run_queue_worker() -> None:
+    """Drains services/queue.py's AnalysisQueueItem backlog — the
+    classification+extraction ("analyze") job every mail sync enqueues.
+    Before this, the only thing that ever called queue.process_next() was
+    POST /ai/queue/process, a manual/test-only route nothing in the app
+    called automatically, so every synced message's automatic
+    classification, extraction, and (via analysis_service) meeting-link
+    detection silently sat in "pending" forever — the message list looked
+    unclassified and the meeting tab stayed empty until someone manually
+    clicked "AI分類を実行" on each message individually."""
+    from app.services import queue
+
+    while True:
+        db = db_session.SessionLocal()
+        try:
+            item = await queue.process_next(db)
+        except Exception:  # noqa: BLE001 - the worker loop must never die
+            item = None
+        finally:
+            db.close()
+        await asyncio.sleep(0 if item is not None else _QUEUE_POLL_IDLE_SECONDS)
 
 
 def _load_persisted_settings() -> None:
