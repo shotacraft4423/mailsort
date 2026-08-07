@@ -118,18 +118,25 @@ export default function App() {
     api
       .getMessage(messageId)
       .then((detail) => {
-        setView("mail");
+        // Always go through pendingSelectId, even when the target message
+        // is already in the currently-selected folder/account. Switching
+        // `view` to "mail" here re-triggers the folder-reload effect below
+        // (view is one of its dependencies) regardless of whether folder/
+        // selectedAccountId actually change — a same-folder shortcut that
+        // called setSelectedId() directly used to race that effect, which
+        // would immediately null the selection back out right after this
+        // set it, so the click looked like it silently did nothing (or
+        // flickered) whenever the source mail happened to already be in
+        // the open folder — the single most common case, since that's
+        // almost always INBOX.
+        setPendingSelectId(messageId);
         // The target message might be in a different account's copy of a
         // folder than whatever's currently selected — switch to the
         // unified "all accounts" view so it's guaranteed visible rather
         // than trying to guess which account-scoped section it lives in.
-        if (detail.folder === folder && selectedAccountId === null) {
-          setSelectedId(messageId);
-        } else {
-          setPendingSelectId(messageId);
-          setSelectedAccountId(null);
-          setFolder(detail.folder);
-        }
+        setSelectedAccountId(null);
+        setFolder(detail.folder);
+        setView("mail");
       })
       .catch(() => {
         // Stale reminder (message deleted/moved since the dashboard was
