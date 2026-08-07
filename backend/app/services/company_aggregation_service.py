@@ -42,7 +42,23 @@ def upsert_company_and_contact(db: Session, message: Message, extraction: Extrac
 
     company.last_contact_at = message.received_at or datetime.utcnow()
 
-    contact_name = (extraction.contact_name if extraction else None) or message.sender_name
+    # Real user report: dozens of genuinely different companies' contacts
+    # all showed the exact same name (and often the exact same masked
+    # phone token) in the contacts list. Root cause was the reverse of
+    # this priority: extraction.contact_name is the AI's freeform guess at
+    # "who is this email about," read from the body text — and for
+    # templated bulk-recruitment mail sent on behalf of many different
+    # companies, the body's signature/footer block is often identical
+    # across all of them (the sending platform's own rep), so every
+    # message ended up attributing its contact to that one shared name
+    # regardless of which company's domain actually sent it.
+    # message.sender_name (parsed from the IMAP From: header by
+    # imap_client.py) is a structurally reliable, per-message signal that
+    # can't collide across unrelated senders the way a body-text guess
+    # can, so it now takes priority; the AI extraction is only a fallback
+    # for the (structurally normal) case where the header carries no
+    # display name at all.
+    contact_name = message.sender_name or (extraction.contact_name if extraction else None)
     if message.sender_address:
         contact = (
             db.query(Contact)
