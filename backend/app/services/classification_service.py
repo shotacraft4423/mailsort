@@ -32,6 +32,7 @@ from app.providers.llm.base import LLMProviderError
 from app.providers.llm.local_mock import LocalMockProvider
 from app.providers.llm.registry import get_llm_provider
 from app.schemas.classification import CategoryTag, ClassificationResult, ReplyCandidate
+from app.services.ai_schema_normalization import NestedListSpec, normalize_for_schema
 from app.services.feedback_service import build_few_shot_suffix, get_similar_corrections
 from app.services.prompt_service import get_active_prompt, render_template, truncate_for_ai
 
@@ -76,136 +77,35 @@ class ClassificationOutcome:
     from_cache: bool
 
 
-# "そもそも日本語と英語で求めているvalueの対応を用意したほうが確実じゃない
-# かな" — prompt instructions alone are advisory; the model can still write
-# "低" instead of "low" for a Literal field despite being told the exact
-# allowed values (round 2 of the real fallback bug, after round 1's key-name
-# fix: right keys, wrong values — priority="低", temperature="冷たい",
-# sentiment="中立"). This is a deterministic normalization pass applied to
-# every real response *before* validation, so a known Japanese synonym gets
-# coerced to the literal the schema actually requires instead of just
-# hoping the model complies. Falls through unchanged (and still validated
-# normally) for anything not in the table, so it never masks a genuinely
-# new kind of drift — it only fixes the specific aliases seen in practice.
-_ENUM_VALUE_ALIASES: dict[str, str] = {
-    # Priority (priority / urgency fields): urgent / high / normal / low
-    "緊急": "urgent",
-    "至急": "urgent",
-    "急ぎ": "urgent",
-    "高": "high",
-    "高い": "high",
-    "中": "normal",
-    "普通": "normal",
-    "通常": "normal",
-    "中程度": "normal",
-    "低": "low",
-    "低い": "low",
-    # Sentiment: positive / neutral / negative
-    "ポジティブ": "positive",
-    "肯定的": "positive",
-    "好意的": "positive",
-    "中立": "neutral",
-    "ニュートラル": "neutral",
-    "ネガティブ": "negative",
-    "否定的": "negative",
-    # Temperature: hot / warm / cold
-    "熱い": "hot",
-    "ホット": "hot",
-    "温かい": "warm",
-    "暖かい": "warm",
-    "ウォーム": "warm",
-    "冷たい": "cold",
-    "コールド": "cold",
+# Round 3 of the real fallback bug class: right keys, right (or coercible)
+# enum values, but categories/reply_candidates came back as a flat list of
+# strings — ["案件紹介"] / ["SES", "エンジニア募集"] — instead of
+# [{"label": "...", "confidence": 0.8}]. This is the only per-field config
+# normalize_classification_payload still needs: which pydantic model each
+# list item becomes, and which alternate key names/defaults to apply. Every
+# other repair (enum-value synonyms, null required-booleans, stray-bool
+# sales_opportunity, and round 5's scalar/list cardinality drift) is now
+# handled generically by ai_schema_normalization.normalize_for_schema based
+# purely on each field's type annotation — see that module's docstring for
+# the full rule set and why "根本的な仕組みごとの改革" (a systemic fix
+# instead of another per-field patch) meant moving the logic there instead
+# of adding a 6th special case here.
+_NESTED_LIST_SPECS: dict[str, NestedListSpec] = {
+    "categories": NestedListSpec(
+        item_model=CategoryTag,
+        key_aliases={"label": ("category", "name", "type"), "confidence": ("score", "probability", "value")},
+        defaults={"confidence": 0.6},
+    ),
+    "reply_candidates": NestedListSpec(
+        item_model=ReplyCandidate,
+        key_aliases={"tone": ("style",), "draft": ("text", "content", "body")},
+        defaults={"draft": ""},
+    ),
 }
-
-# Required boolean fields (default False, not Optional) that a real model
-# sometimes omits or sends as null instead of an explicit true/false.
-_REQUIRED_BOOLEAN_FIELDS = ("reply_required", "meeting_related", "contract_related", "billing_related")
-
-# Round 3 of the same bug class: right keys, right (or coerced) enum
-# values, but categories came back as a flat list of strings —
-# ["案件紹介"] / ["SES", "エンジニア募集"] — instead of
-# [{"label": "...", "confidence": 0.8}], because "categories" reads to a
-# model like a plain tag list unless the example it's shown demonstrates
-# the nested shape (fixed in _required_json_key_instruction below too).
-# Rather than patch this one field and wait for the next structural
-# variant, this coerces *any* list[BaseModel]-typed field generically:
-# bare strings become {<primary field>: value, ...sensible defaults},
-# dicts with a plausible alternate key name (category/name/score/...) get
-# remapped, and a lone scalar sent instead of a list gets wrapped in one.
-# Already-well-formed input passes through untouched either way.
-_NESTED_LIST_FIELD_SPECS: dict[str, tuple[type, dict[str, object]]] = {
-    # field name -> (pydantic model, {key_aliases_and_defaults})
-    "categories": (CategoryTag, {"label": ("category", "name", "type"), "confidence": ("score", "probability", "value")}),
-    "reply_candidates": (ReplyCandidate, {"tone": ("style",), "draft": ("text", "content", "body")}),
-}
-_NESTED_LIST_DEFAULTS: dict[str, dict[str, object]] = {
-    "categories": {"confidence": 0.6},
-    "reply_candidates": {"draft": ""},
-}
-
-
-def _coerce_nested_list_field(field_name: str, value: object) -> object:
-    model_cls, key_aliases = _NESTED_LIST_FIELD_SPECS[field_name]
-    defaults = _NESTED_LIST_DEFAULTS.get(field_name, {})
-    primary_field = next(iter(model_cls.model_fields))
-
-    if isinstance(value, (str, dict)):
-        value = [value]
-    if not isinstance(value, list):
-        return value
-
-    coerced = []
-    for item in value:
-        if isinstance(item, str):
-            coerced.append({primary_field: item, **defaults})
-        elif isinstance(item, dict):
-            remapped = dict(item)
-            for canonical, aliases in key_aliases.items():
-                if canonical in remapped:
-                    continue
-                for alias in aliases:
-                    if alias in remapped:
-                        remapped[canonical] = remapped.pop(alias)
-                        break
-            for key, default_value in defaults.items():
-                remapped.setdefault(key, default_value)
-            coerced.append(remapped)
-        else:
-            coerced.append(item)
-    return coerced
 
 
 def normalize_classification_payload(raw: dict) -> dict:
-    if not isinstance(raw, dict):
-        return raw
-
-    normalized = dict(raw)
-    schema = ClassificationResult.model_json_schema()
-    for field_name, prop in schema.get("properties", {}).items():
-        allowed = prop.get("enum")
-        if not allowed:
-            continue
-        value = normalized.get(field_name)
-        if isinstance(value, str) and value not in allowed:
-            mapped = _ENUM_VALUE_ALIASES.get(value)
-            if mapped in allowed:
-                normalized[field_name] = mapped
-
-    for field_name in _NESTED_LIST_FIELD_SPECS:
-        if field_name in normalized:
-            normalized[field_name] = _coerce_nested_list_field(field_name, normalized[field_name])
-
-    for field_name in _REQUIRED_BOOLEAN_FIELDS:
-        if normalized.get(field_name) is None:
-            normalized[field_name] = False
-
-    # sales_opportunity is str | None — a model that treats it as a yes/no
-    # question sometimes sends a bare boolean instead of a description.
-    if isinstance(normalized.get("sales_opportunity"), bool):
-        normalized["sales_opportunity"] = None
-
-    return normalized
+    return normalize_for_schema(ClassificationResult, raw, nested_list_specs=_NESTED_LIST_SPECS)
 
 
 def build_context(message: Message, *, anonymize: bool) -> dict[str, str]:
