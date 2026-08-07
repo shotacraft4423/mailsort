@@ -63,6 +63,12 @@ npm run tauri dev     # 開発モード（ネイティブウィンドウで起�
 npm run tauri build   # .msi / .exe インストーラを生成
 ```
 
+`npm run tauri build` はフロントエンドだけをネイティブウィンドウで包むので、
+できあがったインストーラを使う側も別途バックエンド（`uvicorn`）を手動起動する
+必要があります。**Pythonのインストール作業ごと不要な、完全ワンクリックの
+インストーラが欲しい場合は、次の「エンドユーザー向けインストーラーを作る」
+を参照してください。**
+
 **4. AIプロバイダーの設定（環境変数）**
 
 PowerShellでの環境変数指定は `export` ではなく `$env:` を使います:
@@ -83,6 +89,42 @@ cd backend
 .venv\Scripts\Activate.ps1
 pytest
 ```
+
+---
+
+### エンドユーザー向けインストーラーを作る（Windows）
+
+ここまでの手順は「自分の開発機でMailSortを動かす」ためのものです。他の人（Python/Node
+を入れていない人）に配る用の、**依存環境のインストール込みの一つの実行ファイル**を作りたい
+場合は、リポジトリ直下の `build_installer.ps1` を実行してください。
+
+```powershell
+# 前提: 上のWindows手順にある Python / Node.js / Rust+MSVC Build Tools が
+# ビルドする側の機に入っていること（配る側の相手には一切不要です）
+powershell -ExecutionPolicy Bypass -File build_installer.ps1
+```
+
+このスクリプトが自動で行うこと:
+
+1. `backend/` にビルド専用の仮想環境を作り、PyInstallerでバックエンド（FastAPI/uvicorn）
+   を単体の実行ファイル（`mailsort-backend.exe`）に固める — 実行にPythonのインストールが
+   一切不要になります。
+2. できた実行ファイルを、Tauriが「サイドカー」として認識する場所
+   （`frontend/src-tauri/binaries/`）に配置する。
+3. `npm run tauri build` でフロントエンドとバックエンドを1つにまとめ、最終的な
+   インストーラー（`.exe` / `.msi`）を生成する。
+
+出来上がるのは `frontend/src-tauri/target/release/bundle/nsis/MailSort_<version>_x64-setup.exe`
+（または `bundle/msi/` の `.msi`）で、**これを配った相手はダブルクリックしてインストールする
+だけ**で使えます。起動するとMailSortのウィンドウが開き、内部でバックエンドも自動的に一緒に
+起動します（今までのように別ウィンドウで `uvicorn` を手動起動する必要はありません）。
+
+補足:
+- 初回起動時にバックエンドの起動が完了するまで数百ミリ秒〜数秒かかることがあります。その間
+  「バックエンドに接続できません」の表示が一瞬出ても、通常はすぐに消えます。消えない場合は
+  MailSortを一度終了して再起動してください。
+- プラグイン機能（`plugins/`）は現時点でインストーラーに同梱されません。プラグインを使う
+  場合は、インストール先の実行ファイルと同じ階層に `plugins/` フォルダを手動で置いてください。
 
 ---
 

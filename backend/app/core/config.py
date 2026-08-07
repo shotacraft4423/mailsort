@@ -11,6 +11,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,7 +20,14 @@ class Settings(BaseSettings):
 
     app_name: str = "MailSort"
     data_dir: Path = Path.home() / ".mailsort"
-    database_url: str = "sqlite:///./mailsort.db"
+    # Left blank by default and resolved to a path under data_dir below
+    # rather than a fixed "./mailsort.db" — a CWD-relative path only worked
+    # by convention (everyone launched uvicorn from backend/), and silently
+    # breaks for a packaged app: a Tauri-sidecar-launched exe has no
+    # guaranteed, writable current directory (could be Program Files on a
+    # per-machine install). MAILSORT_DATABASE_URL still overrides this
+    # outright when set, same as every other setting here.
+    database_url: str = ""
 
     # Master switch: when False, every AI call is short-circuited to the
     # local rule-based fallback so the app behaves as a plain mail client.
@@ -75,6 +83,16 @@ class Settings(BaseSettings):
     def ensure_data_dir(self) -> Path:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         return self.data_dir
+
+    @model_validator(mode="after")
+    def _default_database_url(self) -> "Settings":
+        if not self.database_url:
+            self.ensure_data_dir()
+            # sqlite URLs need forward slashes even on Windows; Path.as_posix()
+            # handles that (a raw f-string with a WindowsPath would otherwise
+            # leave backslashes in the URL, which sqlite3/SQLAlchemy misparse).
+            self.database_url = f"sqlite:///{(self.data_dir / 'mailsort.db').as_posix()}"
+        return self
 
 
 @lru_cache

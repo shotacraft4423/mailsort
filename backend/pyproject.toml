@@ -23,6 +23,11 @@ dev = [
     "pytest-asyncio>=0.23",
     "aiosmtpd>=1.4",
 ]
+# Only needed on the machine that builds the one-click Windows installer
+# (see build_installer.ps1) — never required to run the app normally.
+build = [
+    "pyinstaller>=6.10",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
