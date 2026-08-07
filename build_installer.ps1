@@ -42,7 +42,7 @@ function Write-Section($title) {
 function Invoke-Checked([string]$Description, [scriptblock]$Command) {
     & $Command
     if ($LASTEXITCODE -ne 0) {
-        throw "$Description failed (exit code $LASTEXITCODE) — see the output above for the actual error."
+        throw "$Description failed (exit code $LASTEXITCODE) - see the output above for the actual error."
     }
 }
 
@@ -64,7 +64,7 @@ Write-Section "Backend: freezing with PyInstaller"
 # script without an interactive prompt.
 Invoke-Checked "PyInstaller" { pyinstaller mailsort_backend.spec --noconfirm }
 if (-not (Test-Path "dist\mailsort-backend.exe")) {
-    throw "PyInstaller reported success but dist\mailsort-backend.exe is missing — check the output above."
+    throw "PyInstaller reported success but dist\mailsort-backend.exe is missing - check the output above."
 }
 Pop-Location
 
@@ -88,7 +88,7 @@ Write-Section "Frontend: installing dependencies"
 Push-Location $frontendDir
 Invoke-Checked "npm install" { npm install }
 
-Write-Section "Building the installer (first run can take several minutes — Rust is compiling Tauri itself)"
+Write-Section "Building the installer (first run can take several minutes - Rust is compiling Tauri itself)"
 Invoke-Checked "npm run tauri build" { npm run tauri build }
 Pop-Location
 
@@ -99,7 +99,7 @@ Pop-Location
 $bundleDir = Join-Path $frontendDir "src-tauri\target\release\bundle"
 $installers = Get-ChildItem -Path $bundleDir -Recurse -Include "*.exe", "*.msi" -ErrorAction SilentlyContinue
 if (-not $installers) {
-    throw "Build finished but no .exe/.msi installer was found under $bundleDir — check the tauri build output above."
+    throw "Build finished but no .exe/.msi installer was found under $bundleDir - check the tauri build output above."
 }
 
 Write-Section "Done"
@@ -108,5 +108,5 @@ foreach ($installer in $installers) {
     Write-Host "  $($installer.FullName)" -ForegroundColor Green
 }
 Write-Host ""
-Write-Host "Either of these is the file to hand to an end user — running it installs" -ForegroundColor Green
+Write-Host "Either of these is the file to hand to an end user - running it installs" -ForegroundColor Green
 Write-Host "MailSort with no separate Python/Node/pip/npm step on their machine." -ForegroundColor Green
