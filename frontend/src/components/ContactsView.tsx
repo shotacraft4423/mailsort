@@ -7,12 +7,21 @@ interface Props {
   onSelectMessage: (messageId: string) => void;
 }
 
+type ContactsViewMode = "list" | "card";
+const CONTACTS_VIEW_MODE_KEY = "mailsort.contactsViewMode";
+
 export function ContactsView({ onSelectMessage }: Props) {
   const { t } = useTranslation();
   const [contacts, setContacts] = useState<ContactSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  // "連絡先のページをリスト表示、カード表示切替できるように" — remembered
+  // per-browser (not per-account) since it's a personal display preference,
+  // not data, the same way the dark-mode toggle elsewhere in the app persists.
+  const [viewMode, setViewMode] = useState<ContactsViewMode>(
+    () => (localStorage.getItem(CONTACTS_VIEW_MODE_KEY) as ContactsViewMode | null) ?? "list"
+  );
 
   useEffect(() => {
     api
@@ -20,6 +29,11 @@ export function ContactsView({ onSelectMessage }: Props) {
       .then(setContacts)
       .catch(() => setError(t("contacts.fetchError")));
   }, []);
+
+  const changeViewMode = (mode: ContactsViewMode) => {
+    setViewMode(mode);
+    localStorage.setItem(CONTACTS_VIEW_MODE_KEY, mode);
+  };
 
   if (error) return <div className="view-container">{error}</div>;
   if (!contacts) return <div className="view-container">{t("common.loading")}</div>;
@@ -33,32 +47,65 @@ export function ContactsView({ onSelectMessage }: Props) {
   return (
     <div className="view-container contacts-view">
       <h2>{t("nav.contacts")}</h2>
-      <input
-        className="contacts-search"
-        placeholder={t("contacts.searchPlaceholder")}
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-      />
-
-      <div className="contacts-body">
-        <ul className="contact-list">
-          {filtered.map((c) => (
-            <li
-              key={c.id}
-              className={`contact-row ${c.id === selectedId ? "active" : ""}`}
-              onClick={() => setSelectedId(c.id)}
-            >
-              <strong>{c.name || c.email_address}</strong>
-              <span className="related-list-meta">
-                {c.company_name ?? t("contacts.noCompany")} / {c.email_address}
-              </span>
-            </li>
-          ))}
-          {filtered.length === 0 && <li className="ai-empty">{t("contacts.empty")}</li>}
-        </ul>
-
-        {selected && <ContactDetail contact={selected} onSelectMessage={onSelectMessage} />}
+      <div className="contacts-toolbar">
+        <input
+          className="contacts-search"
+          placeholder={t("contacts.searchPlaceholder")}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        <div className="contacts-view-toggle" role="group" aria-label={t("contacts.viewModeLabel")}>
+          <button className={viewMode === "list" ? "active" : ""} onClick={() => changeViewMode("list")}>
+            {t("contacts.viewModeList")}
+          </button>
+          <button className={viewMode === "card" ? "active" : ""} onClick={() => changeViewMode("card")}>
+            {t("contacts.viewModeCard")}
+          </button>
+        </div>
       </div>
+
+      {viewMode === "list" ? (
+        <div className="contacts-body">
+          <ul className="contact-list">
+            {filtered.map((c) => (
+              <li
+                key={c.id}
+                className={`contact-row ${c.id === selectedId ? "active" : ""}`}
+                onClick={() => setSelectedId(c.id)}
+              >
+                <strong>{c.name || c.email_address}</strong>
+                <span className="related-list-meta">
+                  {c.company_name ?? t("contacts.noCompany")} / {c.email_address}
+                </span>
+              </li>
+            ))}
+            {filtered.length === 0 && <li className="ai-empty">{t("contacts.empty")}</li>}
+          </ul>
+
+          {selected && <ContactDetail contact={selected} onSelectMessage={onSelectMessage} />}
+        </div>
+      ) : (
+        <div className="contacts-card-body">
+          <div className="contacts-card-grid">
+            {filtered.map((c) => (
+              <div
+                key={c.id}
+                className={`contact-card ${c.id === selectedId ? "active" : ""}`}
+                onClick={() => setSelectedId(c.id)}
+              >
+                <strong>{c.name || c.email_address}</strong>
+                <span className="related-list-meta">{c.company_name ?? t("contacts.noCompany")}</span>
+                <span className="related-list-meta">{c.email_address}</span>
+                {c.title && <span className="related-list-meta">{c.title}</span>}
+                {c.phone && <span className="related-list-meta">{c.phone}</span>}
+              </div>
+            ))}
+            {filtered.length === 0 && <p className="ai-empty">{t("contacts.empty")}</p>}
+          </div>
+
+          {selected && <ContactDetail contact={selected} onSelectMessage={onSelectMessage} />}
+        </div>
+      )}
     </div>
   );
 }

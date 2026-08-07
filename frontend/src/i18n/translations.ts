@@ -306,6 +306,9 @@ export const translations = {
 
     "contacts.fetchError": "連絡先を取得できませんでした。",
     "contacts.searchPlaceholder": "名前・会社名・メールアドレスで検索…",
+    "contacts.viewModeLabel": "表示切替",
+    "contacts.viewModeList": "☰ リスト",
+    "contacts.viewModeCard": "▦ カード",
     "contacts.noCompany": "会社未設定",
     "contacts.empty": "連絡先はまだありません。メールを受信・分類すると自動的に登録されます。",
     "contacts.summarize": "AI要約を生成",
@@ -639,6 +642,9 @@ export const translations = {
 
     "contacts.fetchError": "Couldn't load contacts.",
     "contacts.searchPlaceholder": "Search by name, company, or email…",
+    "contacts.viewModeLabel": "View mode",
+    "contacts.viewModeList": "☰ List",
+    "contacts.viewModeCard": "▦ Card",
     "contacts.noCompany": "No company set",
     "contacts.empty": "No contacts yet. They're added automatically as mail is received and classified.",
     "contacts.summarize": "Generate AI summary",
