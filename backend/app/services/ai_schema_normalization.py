@@ -24,6 +24,9 @@ discovered one field at a time from real user logs:
      (age: str | None getting 26), or an int/float field given a string
      with the number embedded in units the model left in
      (headcount: int | None getting "2名")
+  8. a list[str] field given a list of lists (skills=[["Java","MySQL"],
+     ["SQL","VBA"]] when the source email covered multiple candidates and
+     the model grouped each candidate's skills instead of flattening them)
 
 Patching each field as it broke (rounds 1-4 above) works but never
 converges — every new field on ClassificationResult/ExtractionResult is a
@@ -150,6 +153,14 @@ def _is_basemodel_type(annotation: Any) -> bool:
     return isinstance(annotation, type) and issubclass(annotation, BaseModel)
 
 
+def _flatten_to_str(value: object) -> str:
+    if isinstance(value, list):
+        return "、".join(_flatten_to_str(v) for v in value)
+    if isinstance(value, dict):
+        return "、".join(f"{k}: {_flatten_to_str(v)}" for k, v in value.items())
+    return str(value)
+
+
 def _coerce_nested_list_item(item: object, spec: NestedListSpec) -> object:
     primary_field = next(iter(spec.item_model.model_fields))
     if isinstance(item, str):
@@ -202,6 +213,13 @@ def normalize_for_schema(
                 normalized[field_name] = [
                     _coerce_nested_list_item(item, nested_list_specs[field_name]) for item in items
                 ]
+            elif item_type is str and isinstance(value, list):
+                # list[str] field getting a list of lists/dicts instead of
+                # strings (skills=[["Java","MySQL"], ["SQL","VBA"]] when the
+                # source email covers multiple candidates and the model
+                # grouped each candidate's skills instead of flattening
+                # them) — flatten whichever items aren't already strings.
+                normalized[field_name] = [item if isinstance(item, str) else _flatten_to_str(item) for item in value]
             continue
 
         # single nested BaseModel field sent as a bare list/string instead
