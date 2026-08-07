@@ -200,9 +200,13 @@ function PromptsPanel() {
   );
 }
 
-const RULE_FIELDS = ["subject", "sender_address", "sender_name", "body_text", "mail_type", "priority"];
+const RULE_FIELDS = ["subject", "sender_address", "sender_name", "body_text", "mail_type", "priority", "ai_prompt"];
 const RULE_OPERATORS = ["equals", "contains", "starts_with", "in"];
 const ACTION_TYPES = ["tag", "move_to_folder", "notify_slack"];
+const AI_PROMPT_FIELD = "ai_prompt";
+
+const emptyCondition = (): RuleCondition => ({ field: RULE_FIELDS[0], operator: "contains", value: "" });
+const emptyAction = (): RuleAction => ({ type: "tag", params: { tag: "重要" } });
 
 interface RulesPanelProps {
   prefillFolder?: string | null;
@@ -212,12 +216,15 @@ interface RulesPanelProps {
 function RulesPanel({ prefillFolder, onPrefillConsumed }: RulesPanelProps) {
   const { t } = useTranslation();
   const [rules, setRules] = useState<Rule[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [priority, setPriority] = useState(100);
   const [matchMode, setMatchMode] = useState<"all" | "any">("all");
-  const [conditions, setConditions] = useState<RuleCondition[]>([{ field: RULE_FIELDS[0], operator: "contains", value: "" }]);
-  const [actions, setActions] = useState<RuleAction[]>([{ type: "tag", params: { tag: "重要" } }]);
+  const [conditions, setConditions] = useState<RuleCondition[]>([emptyCondition()]);
+  const [actions, setActions] = useState<RuleAction[]>([emptyAction()]);
   const [saving, setSaving] = useState(false);
+  const [reordering, setReordering] = useState(false);
 
   const load = () => api.listRules().then(setRules).catch(() => setRules([]));
 
@@ -233,18 +240,49 @@ function RulesPanel({ prefillFolder, onPrefillConsumed }: RulesPanelProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefillFolder]);
 
-  const addConditionRow = () => setConditions([...conditions, { field: RULE_FIELDS[0], operator: "contains", value: "" }]);
+  const resetForm = () => {
+    setEditingId(null);
+    setName("");
+    setDescription("");
+    setPriority(100);
+    setMatchMode("all");
+    setConditions([emptyCondition()]);
+    setActions([emptyAction()]);
+  };
+
+  // "編集機能" — every field the create form manages gets loaded back in,
+  // so editing a rule is the exact same form instead of a separate,
+  // narrower one that would drift out of sync with what create supports.
+  const startEdit = (rule: Rule) => {
+    setEditingId(rule.id);
+    setName(rule.name);
+    setDescription(rule.description ?? "");
+    setPriority(rule.priority);
+    setMatchMode(rule.match_mode === "any" ? "any" : "all");
+    setConditions(rule.conditions.length ? rule.conditions.map((c) => ({ ...c })) : [emptyCondition()]);
+    setActions(rule.actions.length ? rule.actions.map((a) => ({ ...a, params: { ...a.params } })) : [emptyAction()]);
+  };
+
+  const addConditionRow = () => setConditions([...conditions, emptyCondition()]);
   const updateCondition = (index: number, patch: Partial<RuleCondition>) =>
     setConditions(conditions.map((c, i) => (i === index ? { ...c, ...patch } : c)));
   const removeCondition = (index: number) => setConditions(conditions.filter((_, i) => i !== index));
 
-  const createRule = async () => {
+  const addActionRow = () => setActions([...actions, emptyAction()]);
+  const updateAction = (index: number, patch: Partial<RuleAction>) =>
+    setActions(actions.map((a, i) => (i === index ? { ...a, ...patch } : a)));
+  const removeAction = (index: number) => setActions(actions.filter((_, i) => i !== index));
+
+  const saveRule = async () => {
     if (!name || conditions.some((c) => !c.value)) return;
     setSaving(true);
     try {
-      await api.createRule({ name, priority, match_mode: matchMode, conditions, actions });
-      setName("");
-      setConditions([{ field: RULE_FIELDS[0], operator: "contains", value: "" }]);
+      if (editingId) {
+        await api.updateRule(editingId, { name, description, priority, match_mode: matchMode, conditions, actions });
+      } else {
+        await api.createRule({ name, description, priority, match_mode: matchMode, conditions, actions });
+      }
+      resetForm();
       await load();
     } finally {
       setSaving(false);
@@ -257,8 +295,29 @@ function RulesPanel({ prefillFolder, onPrefillConsumed }: RulesPanelProps) {
   };
 
   const deleteRule = async (id: string) => {
+    if (editingId === id) resetForm();
     await api.deleteRule(id);
     await load();
+  };
+
+  // "優先度の並び替えができるように" — up/down buttons swap this rule with
+  // its neighbor in the currently-displayed (priority-sorted) order and
+  // send the whole new order to /rules/reorder, which reassigns priority
+  // by position; simpler and less error-prone for most users than raw
+  // drag-and-drop, and works the same on touch devices.
+  const move = async (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= rules.length || reordering) return;
+    const reordered = [...rules];
+    [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+    setRules(reordered);
+    setReordering(true);
+    try {
+      await api.reorderRules(reordered.map((r) => r.id));
+      await load();
+    } finally {
+      setReordering(false);
+    }
   };
 
   const actionLabel = (action: RuleAction) => {
@@ -269,23 +328,35 @@ function RulesPanel({ prefillFolder, onPrefillConsumed }: RulesPanelProps) {
   };
   const fieldLabel = (field: string) => (RULE_FIELDS.includes(field) ? t(`ruleField.${field}`) : field);
   const operatorLabel = (op: string) => (RULE_OPERATORS.includes(op) ? t(`ruleOperator.${op}`) : op);
+  const conditionSummary = (c: RuleCondition) =>
+    c.field === AI_PROMPT_FIELD ? `${fieldLabel(c.field)} 「${c.value}」` : `${fieldLabel(c.field)} ${operatorLabel(c.operator)} "${c.value}"`;
 
   return (
     <section className="admin-panel">
       <p className="ai-empty">{t("admin.rulesHelp")}</p>
 
       <ul className="rule-list">
-        {rules.map((r) => (
+        {rules.map((r, i) => (
           <li key={r.id} className={`rule-card ${r.is_active ? "" : "inactive"}`}>
             <div className="rule-card-header">
+              <div className="rule-order-buttons">
+                <button disabled={i === 0 || reordering} onClick={() => move(i, -1)} title={t("admin.moveUp")}>
+                  ▲
+                </button>
+                <button disabled={i === rules.length - 1 || reordering} onClick={() => move(i, 1)} title={t("admin.moveDown")}>
+                  ▼
+                </button>
+              </div>
               <strong>{r.name}</strong>
               <span>{t("admin.priorityLabel", { priority: r.priority })}</span>
+              <button onClick={() => startEdit(r)}>{t("common.edit")}</button>
               <button onClick={() => toggle(r.id)}>{r.is_active ? t("admin.disable") : t("admin.enable")}</button>
               <button onClick={() => deleteRule(r.id)}>{t("common.delete")}</button>
             </div>
+            {r.description && <div className="rule-summary rule-description">{r.description}</div>}
             <div className="rule-summary">
               {r.match_mode === "all" ? t("admin.conditionsSummaryAll") : t("admin.conditionsSummaryAny")}{" "}
-              {r.conditions.map((c) => `${fieldLabel(c.field)} ${operatorLabel(c.operator)} "${c.value}"`).join(" / ")}
+              {r.conditions.map(conditionSummary).join(" / ")}
             </div>
             <div className="rule-summary">{t("admin.actionsSummary", { actions: r.actions.map(actionLabel).join(", ") })}</div>
           </li>
@@ -294,8 +365,14 @@ function RulesPanel({ prefillFolder, onPrefillConsumed }: RulesPanelProps) {
       </ul>
 
       <div className="rule-create-form">
-        <h4>{t("admin.newRuleHeading")}</h4>
+        <h4>{editingId ? t("admin.editRuleHeading") : t("admin.newRuleHeading")}</h4>
         <input placeholder={t("admin.ruleNamePlaceholder")} value={name} onChange={(e) => setName(e.target.value)} />
+        <textarea
+          className="rule-description-input"
+          placeholder={t("admin.ruleDescriptionPlaceholder")}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
         <div className="rule-inline-fields">
           <label>
             {t("admin.priorityFieldLabel")}
@@ -312,61 +389,84 @@ function RulesPanel({ prefillFolder, onPrefillConsumed }: RulesPanelProps) {
 
         {conditions.map((c, i) => (
           <div key={i} className="rule-condition-row">
-            <select value={c.field} onChange={(e) => updateCondition(i, { field: e.target.value })}>
+            <select value={c.field} onChange={(e) => updateCondition(i, { field: e.target.value, operator: e.target.value === AI_PROMPT_FIELD ? "matches" : c.operator })}>
               {RULE_FIELDS.map((f) => (
                 <option key={f} value={f}>
                   {t(`ruleField.${f}`)}
                 </option>
               ))}
             </select>
-            <select value={c.operator} onChange={(e) => updateCondition(i, { operator: e.target.value })}>
-              {RULE_OPERATORS.map((op) => (
-                <option key={op} value={op}>
-                  {t(`ruleOperator.${op}`)}
-                </option>
-              ))}
-            </select>
-            <input placeholder={t("admin.valuePlaceholder")} value={c.value} onChange={(e) => updateCondition(i, { value: e.target.value })} />
+            {c.field === AI_PROMPT_FIELD ? (
+              <textarea
+                className="rule-ai-prompt-input"
+                placeholder={t("admin.aiPromptValuePlaceholder")}
+                value={c.value}
+                onChange={(e) => updateCondition(i, { value: e.target.value })}
+              />
+            ) : (
+              <>
+                <select value={c.operator} onChange={(e) => updateCondition(i, { operator: e.target.value })}>
+                  {RULE_OPERATORS.map((op) => (
+                    <option key={op} value={op}>
+                      {t(`ruleOperator.${op}`)}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  placeholder={t("admin.valuePlaceholder")}
+                  value={c.value}
+                  onChange={(e) => updateCondition(i, { value: e.target.value })}
+                />
+              </>
+            )}
             <button onClick={() => removeCondition(i)}>{t("common.delete")}</button>
           </div>
         ))}
         <button onClick={addConditionRow}>{t("admin.addCondition")}</button>
+        {conditions.some((c) => c.field === AI_PROMPT_FIELD) && <p className="ai-empty rule-ai-prompt-help">{t("admin.aiPromptHelp")}</p>}
 
-        <label className="rule-action-field">
-          {t("admin.actionTypeLabel")}
-          <select
-            value={actions[0]?.type ?? "tag"}
-            onChange={(e) => setActions([{ ...actions[0], type: e.target.value }])}
-          >
-            {ACTION_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {t(`actionType.${type}`)}
-              </option>
-            ))}
-          </select>
-        </label>
-        {actions[0]?.type === "move_to_folder" ? (
-          <label className="rule-action-field">
-            {t("admin.targetFolderLabel")}
-            <input
-              placeholder={t("admin.targetFolderPlaceholder")}
-              value={actions[0]?.params?.folder ?? ""}
-              onChange={(e) => setActions([{ ...actions[0], params: { ...actions[0]?.params, folder: e.target.value } }])}
-            />
-          </label>
-        ) : actions[0]?.type === "tag" ? (
-          <label className="rule-action-field">
-            {t("admin.tagNameLabel")}
-            <input
-              value={actions[0]?.params?.tag ?? ""}
-              onChange={(e) => setActions([{ ...actions[0], params: { ...actions[0]?.params, tag: e.target.value } }])}
-            />
-          </label>
-        ) : null}
+        {actions.map((a, i) => (
+          <div key={i} className="rule-action-row">
+            <label className="rule-action-field">
+              {t("admin.actionTypeLabel")}
+              <select value={a.type} onChange={(e) => updateAction(i, { type: e.target.value })}>
+                {ACTION_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {t(`actionType.${type}`)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {a.type === "move_to_folder" ? (
+              <label className="rule-action-field">
+                {t("admin.targetFolderLabel")}
+                <input
+                  placeholder={t("admin.targetFolderPlaceholder")}
+                  value={a.params?.folder ?? ""}
+                  onChange={(e) => updateAction(i, { params: { ...a.params, folder: e.target.value } })}
+                />
+              </label>
+            ) : a.type === "tag" ? (
+              <label className="rule-action-field">
+                {t("admin.tagNameLabel")}
+                <input value={a.params?.tag ?? ""} onChange={(e) => updateAction(i, { params: { ...a.params, tag: e.target.value } })} />
+              </label>
+            ) : null}
+            <button onClick={() => removeAction(i)}>{t("common.delete")}</button>
+          </div>
+        ))}
+        <button onClick={addActionRow}>{t("admin.addAction")}</button>
 
-        <button className="primary" onClick={createRule} disabled={saving}>
-          {t("admin.createRule")}
-        </button>
+        <div className="rule-form-buttons">
+          <button className="primary" onClick={saveRule} disabled={saving}>
+            {editingId ? t("admin.updateRule") : t("admin.createRule")}
+          </button>
+          {editingId && (
+            <button onClick={resetForm} disabled={saving}>
+              {t("admin.cancelEdit")}
+            </button>
+          )}
+        </div>
       </div>
     </section>
   );

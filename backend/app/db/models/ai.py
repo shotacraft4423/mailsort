@@ -41,6 +41,16 @@ class AIAnalysis(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     fallback_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     analyzed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
+    # Cache for rule_engine.py's "ai_prompt" rule-condition type: {"<rule_id>:
+    # <condition fingerprint>": true|false}. Rules re-evaluate on every
+    # analyze_message call, cache hit or not (a rule added after the first
+    # analysis must still fire on the next open) — without this, an
+    # AI-judged condition would re-spend an LLM call on every single re-open
+    # of an already-classified message. Keying on a fingerprint of the
+    # condition's own prompt text (not just the rule id) means editing a
+    # rule's prompt naturally invalidates just that entry.
+    rule_ai_conditions_json: Mapped[str] = mapped_column(Text, default="{}")
+
 
 class PromptTemplate(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     """GUI-editable prompt, versioned. `task` selects which pipeline stage it

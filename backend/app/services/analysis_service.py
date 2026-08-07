@@ -434,7 +434,7 @@ async def _run_rules_and_plugins(
     dispatch_message_classified() — they were persisted and silently
     ignored. This is the wiring that makes them actually fire on every
     classified message, cached or fresh."""
-    fired = rule_engine.evaluate_rules(db, message, analysis)
+    fired = await rule_engine.evaluate_rules(db, message, analysis)
     rule_engine.apply_actions(db, message, fired)
 
     # Plugin hooks are arbitrary third-party code (see plugins/sample_slack_

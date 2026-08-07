@@ -284,11 +284,21 @@ export interface RuleAction {
 export interface Rule {
   id: string;
   name: string;
+  description: string;
   is_active: boolean;
   priority: number;
   match_mode: string;
   conditions: RuleCondition[];
   actions: RuleAction[];
+}
+
+export interface RuleUpdateInput {
+  name?: string;
+  description?: string;
+  priority?: number;
+  match_mode?: string;
+  conditions?: RuleCondition[];
+  actions?: RuleAction[];
 }
 
 export interface DealNetworkNode {
@@ -468,8 +478,18 @@ export const api = {
   deletePrompt: (templateId: string) => request<{ status: string }>(`/prompts/${templateId}`, { method: "DELETE" }),
 
   listRules: () => request<Rule[]>("/rules"),
-  createRule: (input: { name: string; priority?: number; match_mode?: string; conditions: RuleCondition[]; actions: RuleAction[] }) =>
-    request<Rule>("/rules", { method: "POST", body: JSON.stringify(input) }),
+  createRule: (input: {
+    name: string;
+    description?: string;
+    priority?: number;
+    match_mode?: string;
+    conditions: RuleCondition[];
+    actions: RuleAction[];
+  }) => request<Rule>("/rules", { method: "POST", body: JSON.stringify(input) }),
+  updateRule: (id: string, input: RuleUpdateInput) =>
+    request<Rule>(`/rules/${id}`, { method: "PUT", body: JSON.stringify(input) }),
+  reorderRules: (ruleIds: string[]) =>
+    request<Rule[]>("/rules/reorder", { method: "PUT", body: JSON.stringify({ rule_ids: ruleIds }) }),
   toggleRule: (id: string) => request<Rule>(`/rules/${id}/toggle`, { method: "PATCH" }),
   deleteRule: (id: string) => request<{ status: string }>(`/rules/${id}`, { method: "DELETE" }),
 

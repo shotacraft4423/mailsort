@@ -19,6 +19,10 @@ class Rule(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "rules"
 
     name: Mapped[str] = mapped_column(String(255))
+    # Free-text notes ("詳細な設定") — not evaluated, purely so a rule's
+    # author can record *why* it exists (e.g. "◯◯社は必ず最優先で確認する
+    # 担当がいるため" ) for whoever edits it next, themselves included.
+    description: Mapped[str] = mapped_column(Text, default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     priority: Mapped[int] = mapped_column(Integer, default=100)  # lower runs first
     conditions_json: Mapped[str] = mapped_column(Text, default="[]")

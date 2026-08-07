@@ -1477,6 +1477,70 @@ a:focus-visible {
   margin-top: 4px;
 }
 
+.rule-action-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.rule-order-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rule-order-buttons button {
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 0 6px;
+  line-height: 1.4;
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.rule-order-buttons button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.rule-description {
+  font-style: italic;
+}
+
+.rule-description-input,
+.rule-ai-prompt-input {
+  width: 100%;
+  min-height: 44px;
+  resize: vertical;
+  font: inherit;
+  margin-top: 4px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  padding: 6px 8px;
+}
+
+.rule-ai-prompt-input {
+  min-height: 34px;
+  margin: 0;
+  flex: 1;
+}
+
+.rule-ai-prompt-help {
+  margin-top: -4px;
+}
+
+.rule-form-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
 .admin-panel button.primary {
   background: var(--accent);
   color: white;
