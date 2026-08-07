@@ -38,6 +38,57 @@ DEFAULT_SYSTEM_PROMPT = (
 DEFAULT_USER_PROMPT_TEMPLATE = "件名: {{ subject }}\n本文:\n{{ body }}"
 
 
+# Round 4 of the same AI-JSON-shape-drift bug class documented in
+# classification_service.py (see normalize_classification_payload's
+# docstring for rounds 1-3): tool_links is a single nested ToolLinks
+# object, but the model sometimes flattens it into a bare list of URL
+# strings — ['https://gy53.asp.cuenote.jp/...'] or [] — instead of
+# {"other_urls": [...]}. Rather than dump every stray URL into other_urls
+# (which would silently break meeting_extraction_service's
+# extraction.tool_links.teams/meet/zoom lookups), bucket each URL by
+# domain the same way a properly-shaped response would have.
+_TOOL_LINK_DOMAIN_PATTERNS: tuple[tuple[str, str], ...] = (
+    ("teams.microsoft.com", "teams"),
+    ("zoom.us", "zoom"),
+    ("meet.google.com", "meet"),
+    ("chatwork.com", "chatwork"),
+    ("slack.com", "slack"),
+    ("backlog.com", "backlog"),
+    ("backlog.jp", "backlog"),
+    ("notion.so", "notion"),
+    ("notion.site", "notion"),
+    ("github.com", "github"),
+    ("atlassian.net", "jira"),
+    ("redmine", "redmine"),
+)
+
+
+def _categorize_tool_link(url: str) -> str:
+    for domain, field in _TOOL_LINK_DOMAIN_PATTERNS:
+        if domain in url:
+            return field
+    return "other_urls"
+
+
+def normalize_extraction_payload(raw: dict) -> dict:
+    if not isinstance(raw, dict):
+        return raw
+
+    normalized = dict(raw)
+    tool_links = normalized.get("tool_links")
+    if isinstance(tool_links, list):
+        buckets: dict[str, list[str]] = {}
+        for url in tool_links:
+            if not isinstance(url, str):
+                continue
+            buckets.setdefault(_categorize_tool_link(url), []).append(url)
+        normalized["tool_links"] = buckets
+    elif isinstance(tool_links, str):
+        normalized["tool_links"] = {_categorize_tool_link(tool_links): [tool_links]}
+
+    return normalized
+
+
 @dataclass
 class ExtractionOutcome:
     result: ExtractionResult
@@ -58,7 +109,7 @@ async def extract_message(db: Session, message: Message) -> ExtractionOutcome:
     is_fallback = False
     try:
         raw, _usage = await provider.complete_json(system_prompt=system_prompt, user_prompt=user_prompt)
-        result = ExtractionResult.model_validate(raw)
+        result = ExtractionResult.model_validate(normalize_extraction_payload(raw))
     except (LLMProviderError, ValidationError):
         # local mock has no dedicated extraction logic; empty result is a
         # safe default whether the provider failed outright or just

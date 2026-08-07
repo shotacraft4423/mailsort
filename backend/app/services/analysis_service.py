@@ -160,7 +160,9 @@ async def analyze_message(db: Session, message: Message, *, force: bool = False)
         classification = ClassificationResult.model_validate(
             classification_service.normalize_classification_payload(raw.get("classification") or {})
         )
-        extraction = ExtractionResult.model_validate(raw.get("extraction") or {})
+        extraction = ExtractionResult.model_validate(
+            extraction_service.normalize_extraction_payload(raw.get("extraction") or {})
+        )
     except (LLMProviderError, ValidationError) as exc:
         # See classification_service.classify_message's matching except
         # block — same rationale: without this, "every mail is being
