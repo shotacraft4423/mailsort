@@ -85,8 +85,23 @@ def _bucket_tool_links(urls: list) -> dict:
     return buckets
 
 
+# meeting is a single nested MeetingInfo object, but the model sometimes
+# sends the whole thing as a bare date/time string instead — e.g.
+# "8/4(火) 17:00～18:00＠web" instead of {"datetime_text": "8/4(火) ..."}.
+# There's no participants/url/platform to recover from free text like this,
+# so the whole string becomes datetime_text (meeting_extraction_service and
+# the calendar view both already treat that field as raw, unparsed text).
+def _bucket_meeting(texts: list) -> dict:
+    joined = "; ".join(str(t) for t in texts if isinstance(t, str))
+    return {"datetime_text": joined} if joined else {}
+
+
 def normalize_extraction_payload(raw: dict) -> dict:
-    return normalize_for_schema(ExtractionResult, raw, nested_object_bucketizers={"tool_links": _bucket_tool_links})
+    return normalize_for_schema(
+        ExtractionResult,
+        raw,
+        nested_object_bucketizers={"tool_links": _bucket_tool_links, "meeting": _bucket_meeting},
+    )
 
 
 @dataclass

@@ -184,9 +184,17 @@ def normalize_for_schema(
 
         # single nested BaseModel field sent as a bare list/string instead
         # of an object -> hand off to a caller-supplied bucketizer (there's
-        # no generic way to know how arbitrary scalars should re-nest).
+        # no generic way to know how arbitrary scalars should re-nest). A
+        # *required* such field (e.g. tool_links: ToolLinks =
+        # Field(default_factory=ToolLinks)) getting null needs its own
+        # check here too — this branch used to `continue` unconditionally
+        # for any BaseModel-typed field, which meant the generic
+        # "required field got null" rule further down was never reached
+        # for tool_links at all and it fell back to local_mock every time.
         if _is_basemodel_type(unwrapped):
-            if isinstance(value, (list, str)):
+            if value is None and not optional:
+                normalized[field_name] = {}
+            elif isinstance(value, (list, str)):
                 bucketizer = nested_object_bucketizers.get(field_name)
                 if bucketizer is not None:
                     items = value if isinstance(value, list) else [value]
@@ -201,11 +209,16 @@ def normalize_for_schema(
                 normalized[field_name] = field_info.get_default(call_default_factory=True)
             continue
 
-        # scalar field getting a list where the model was asked for one value.
-        if unwrapped in (str, int, float) and isinstance(value, list):
+        # scalar field getting a list/dict where the model was asked for one
+        # value (e.g. candidate_summary: str | None getting a structured
+        # {"name": ..., "age": ...} dict instead of prose).
+        if unwrapped in (str, int, float) and isinstance(value, (list, dict)):
             if unwrapped is str:
-                normalized[field_name] = "、".join(str(v) for v in value) if value else None
-            else:
+                if isinstance(value, list):
+                    normalized[field_name] = "、".join(str(v) for v in value) if value else None
+                else:
+                    normalized[field_name] = "、".join(f"{k}: {v}" for k, v in value.items()) if value else None
+            elif isinstance(value, list):
                 normalized[field_name] = value[0] if value else None
             continue
 
