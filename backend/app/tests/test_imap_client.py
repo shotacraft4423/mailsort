@@ -79,6 +79,59 @@ def test_parse_handles_missing_date_gracefully():
     assert parsed.subject == "件名のみ"
 
 
+def test_fetch_new_skips_a_message_that_fails_to_parse_instead_of_returning_nothing(monkeypatch):
+    """Real user report: "サーバーによって受信できないメールがある / 一件も
+    受信できない" — one malformed message anywhere in the fetch window (an
+    unusual header, a corrupt attachment MIME part, whatever) used to raise
+    out of fetch_new()'s per-UID loop entirely. Since fetch_new() only ever
+    returns its `messages` list at the very end, sync_account got nothing
+    back at all for the whole batch — not just the one bad message, every
+    other message waiting on that account, silently, with no error surfaced
+    anywhere the user would see it. One bad message must not blank out an
+    otherwise-successful sync."""
+    from app.db.models.email import EmailAccount
+    from app.services.mail.imap_client import FetchedMessage
+
+    account = EmailAccount(
+        display_name="a", email_address="a@example.com", protocol="imap_smtp",
+        imap_host="imap.example.com", imap_port=993, use_ssl=True,
+    )
+
+    class _FakeConn:
+        def login(self, *args, **kwargs):
+            pass
+
+        def select(self, folder):
+            pass
+
+        def search(self, charset, criteria):
+            return "OK", [b"1 2 3"]
+
+        def fetch(self, uid, spec):
+            return "OK", [(b"1 (RFC822 {3}", uid + b"-raw")]
+
+        def logout(self):
+            pass
+
+    monkeypatch.setattr("app.services.mail.imap_client.imaplib.IMAP4_SSL", lambda host, port: _FakeConn())
+
+    def _parse(self, uid, raw):
+        if uid == "2":
+            raise ValueError("simulated malformed message")
+        return FetchedMessage(
+            uid=uid, subject="s", sender_name="n", sender_address="a@b.com",
+            to_addresses=[], cc_addresses=[], body_text="body", body_html="",
+            received_at=None, attachments=[],
+        )
+
+    monkeypatch.setattr(ImapConnector, "_parse", _parse)
+
+    connector = ImapConnector(account)
+    result = connector.fetch_new("INBOX", limit=50)
+
+    assert [m.uid for m in result] == ["1", "3"]
+
+
 def test_parse_list_response_quoted_name():
     assert parse_list_response(rb'(\HasNoChildren) "/" "INBOX"') == "INBOX"
 

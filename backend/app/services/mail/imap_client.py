@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import email
 import imaplib
+import logging
 import re
 from dataclasses import dataclass
 from email.header import decode_header
@@ -18,6 +19,8 @@ from email.utils import parsedate_to_datetime
 from app.core.security import decrypt_secret
 from app.db.models.email import EmailAccount
 from app.services.mail.html_text import html_to_text
+
+logger = logging.getLogger(__name__)
 
 # Matches an IMAP LIST response line: (flags) "delimiter" name
 # e.g. `(\HasNoChildren) "/" "INBOX"` or `(\Noselect \HasChildren) "/" INBOX`
@@ -114,7 +117,22 @@ class ImapConnector:
                 if status != "OK" or not msg_data or msg_data[0] is None:
                     continue
                 raw = msg_data[0][1]
-                messages.append(self._parse(uid.decode(), raw))
+                try:
+                    messages.append(self._parse(uid.decode(), raw))
+                except Exception as exc:  # noqa: BLE001
+                    # One malformed message (unusual encoding, a header
+                    # libémail can't parse, corrupt attachment MIME, etc.)
+                    # used to raise out of this loop and abort fetch_new()
+                    # entirely — the caller (sync_service.sync_account) never
+                    # gets a partial list back, so a single bad message from
+                    # a server meant *nothing* from that account synced,
+                    # silently, however many other messages were waiting.
+                    # "サーバーによって受信できないメールがある/一件も受信で
+                    # きない" is exactly this: skip the one message that
+                    # can't be parsed and keep going, instead of discarding
+                    # the whole batch over it.
+                    logger.warning("imap: failed to parse message uid=%s, skipping (%s)", uid, exc)
+                    continue
             return messages
         finally:
             try:
