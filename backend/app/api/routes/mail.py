@@ -77,13 +77,32 @@ class SendRequest(BaseModel):
     in_reply_to: str | None = None
 
 
+_VIEW_ONLINE_STUB_MIN_CHARS = 150
+_VIEW_ONLINE_STUB_RATIO = 1.5
+
+
 def _display_body_text(message: Message) -> str:
     """Repairs messages synced before the imap_client HTML/plain-text fix
     (see services/mail/html_text.py): those have raw HTML markup sitting in
     body_text with body_html empty. Computed at read time rather than in a
-    migration so it also self-heals if the sniff heuristic improves later."""
+    migration so it also self-heals if the sniff heuristic improves later.
+
+    Separately: mass-mail ASPs (cuenote and similar) commonly send a
+    multipart/alternative message whose text/plain part is intentionally
+    just a one-or-two-line "メールがうまく表示されない方はこちらをご覧く
+    ださい" stub with a tracking link, while the actual content — the job
+    listing, the案件 details, everything the recipient actually needs to
+    read — only exists in the text/html part. imap_client correctly stores
+    both parts, but nothing ever displayed body_html, so the mail looked
+    empty/broken in MailSort while rendering fine in a client (Outlook)
+    that shows HTML mail. When the html-derived text is clearly the
+    substantive version (much longer than the plain-text part), prefer it."""
     if looks_like_html(message.body_text) and not message.body_html:
         return html_to_text(message.body_text)
+    if message.body_html:
+        html_derived = html_to_text(message.body_html)
+        if len(html_derived) > _VIEW_ONLINE_STUB_MIN_CHARS and len(html_derived) > len(message.body_text.strip()) * _VIEW_ONLINE_STUB_RATIO:
+            return html_derived
     return message.body_text
 
 

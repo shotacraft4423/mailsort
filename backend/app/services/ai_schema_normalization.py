@@ -16,6 +16,14 @@ discovered one field at a time from real user logs:
   5. scalar (X | None) fields sent as list[X] when the source content
      legitimately has more than one candidate value, and list[T] fields
      (Field(default_factory=list)) sent as null
+  6. a required (non-Optional) nested-BaseModel field sent as null, a
+     bare string sent for a nested object with no obvious re-nesting
+     (meeting="8/4(火) 17:00～18:00＠web"), and a str field sent a
+     structured dict instead of prose
+  7. plain str/int/float type mismatches: a str field given a bare number
+     (age: str | None getting 26), or an int/float field given a string
+     with the number embedded in units the model left in
+     (headcount: int | None getting "2名")
 
 Patching each field as it broke (rounds 1-4 above) works but never
 converges — every new field on ClassificationResult/ExtractionResult is a
@@ -42,6 +50,9 @@ model it runs against:
     treating a free-text field as a yes/no question)
   - Literal/enum-valued field getting a Japanese synonym -> mapped via
     `_ENUM_VALUE_ALIASES`
+  - `str` field getting a bare `int`/`float` -> stringified
+  - `int`/`float` field getting a string with the number embedded in
+    trailing units/counters -> the first number in the string, extracted
 
 A field whose value is already well-formed is never touched. New fields
 added to either schema get every rule above "for free" just by being present
@@ -52,12 +63,23 @@ the model drifts on a field that pattern already covers.
 """
 from __future__ import annotations
 
+import re
 import types
 import typing
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from pydantic import BaseModel
+
+_NUMBER_PATTERN = re.compile(r"-?\d+(?:\.\d+)?")
+
+
+def _extract_number(text: str, target_type: type) -> int | float | None:
+    match = _NUMBER_PATTERN.search(text)
+    if not match:
+        return None
+    value = float(match.group())
+    return int(value) if target_type is int else value
 
 _ENUM_VALUE_ALIASES: dict[str, str] = {
     # Priority / urgency fields: urgent / high / normal / low
@@ -220,6 +242,21 @@ def normalize_for_schema(
                     normalized[field_name] = "、".join(f"{k}: {v}" for k, v in value.items()) if value else None
             elif isinstance(value, list):
                 normalized[field_name] = value[0] if value else None
+            continue
+
+        # str field getting a bare number instead of text (age: str | None
+        # getting 26, unit_price: str | None getting 650000) -> stringify.
+        if unwrapped is str and isinstance(value, (int, float)) and not isinstance(value, bool):
+            normalized[field_name] = str(value)
+            continue
+
+        # int/float field getting a string with the number embedded in
+        # units/counters the model left in (headcount: int | None getting
+        # "2名", interview_count: int | None getting "1回") -> extract it.
+        if unwrapped in (int, float) and isinstance(value, str):
+            number = _extract_number(value, unwrapped)
+            if number is not None:
+                normalized[field_name] = number
             continue
 
         # Optional non-bool field getting a bare bool (yes/no misread of a

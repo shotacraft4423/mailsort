@@ -263,15 +263,28 @@ export default function App() {
     let done = 0;
     let failed = 0;
     setBulkProgress({ done, total: targets.length, failed });
-    for (const m of targets) {
-      try {
-        await api.analyze(m.id);
-      } catch {
-        failed += 1;
+    // "再分類がとにかく遅い" — one message at a time meant a 200-message run
+    // paid for 200 LLM round-trips in strict sequence. Each fetch already
+    // gets its own backend DB session (FastAPI's per-request Depends(get_db)),
+    // so running a bounded number of these requests at once is safe and cuts
+    // wall-clock time roughly by the concurrency factor.
+    const BULK_CLASSIFY_CONCURRENCY = 5;
+    let nextIndex = 0;
+    const worker = async () => {
+      while (nextIndex < targets.length) {
+        const m = targets[nextIndex++];
+        try {
+          await api.analyze(m.id);
+        } catch {
+          failed += 1;
+        }
+        done += 1;
+        setBulkProgress({ done, total: targets.length, failed });
       }
-      done += 1;
-      setBulkProgress({ done, total: targets.length, failed });
-    }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(BULK_CLASSIFY_CONCURRENCY, targets.length) }, () => worker())
+    );
     setBulkResultMessage(
       failed > 0 ? t("bulkClassify.done", { done, failed }) : t("bulkClassify.allSucceeded", { done })
     );

@@ -31,7 +31,7 @@ import logging
 from dataclasses import dataclass
 
 from pydantic import ValidationError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import Settings, get_settings
 from app.core.security import content_hash
@@ -352,6 +352,9 @@ def reroute_classified_messages(db: Session) -> int:
     return moved
 
 
+_RECLASSIFY_CONCURRENCY = 5
+
+
 async def reclassify_fallback_messages(
     db: Session, *, folder: str | None = None, account_id: str | None = None, limit: int = 50
 ) -> dict[str, int]:
@@ -365,23 +368,48 @@ async def reclassify_fallback_messages(
     message currently flagged is_fallback and force-reclassifies just
     those (skips everything already successfully AI-classified, unlike
     forcing bulk-classify wholesale, which would burn tokens re-sending
-    mail that's already fine)."""
+    mail that's already fine).
+
+    "再分類がとにかく遅い" — the only genuinely slow step in analyze_message
+    is the LLM network round-trip; running every message through it one at
+    a time made a 50-message reclassify pay for 50 round-trips in strict
+    sequence. This now runs up to _RECLASSIFY_CONCURRENCY of them
+    concurrently. A single shared Session isn't safe to use from multiple
+    coroutines running "at once" (an await inside one can hand control to
+    another whose commit/query then corrupts the first one's in-flight
+    transaction state), so each concurrent task gets its own Session bound
+    to the *same engine/connection* as the caller's `db` — via
+    `db.get_bind()` rather than the app's global SessionLocal — so this
+    works whether `db` is the real app's shared engine or a test's own
+    throwaway one. `db.expire_all()` at the end makes sure the caller's
+    `db` doesn't keep serving pre-reclassify cached attribute values for
+    any of the objects it already touched (e.g. in the query above)."""
     q = db.query(Message).join(AIAnalysis, AIAnalysis.message_id == Message.id).filter(AIAnalysis.is_fallback.is_(True))
     if folder:
         q = q.filter(Message.folder == folder)
     if account_id:
         q = q.filter(Message.account_id == account_id)
-    messages = q.limit(limit).all()
+    message_ids = [message.id for message in q.limit(limit).all()]
 
-    recovered = 0
-    still_fallback = 0
-    for message in messages:
-        outcome = await analyze_message(db, message, force=True)
-        if outcome.is_fallback:
-            still_fallback += 1
-        else:
-            recovered += 1
-    return {"attempted": len(messages), "recovered": recovered, "still_fallback": still_fallback}
+    session_factory = sessionmaker(bind=db.get_bind())
+    semaphore = asyncio.Semaphore(_RECLASSIFY_CONCURRENCY)
+
+    async def _reclassify_one(message_id: str) -> bool:
+        async with semaphore:
+            session = session_factory()
+            try:
+                message = session.query(Message).filter(Message.id == message_id).one_or_none()
+                if message is None:
+                    return False
+                outcome = await analyze_message(session, message, force=True)
+                return not outcome.is_fallback
+            finally:
+                session.close()
+
+    results = await asyncio.gather(*(_reclassify_one(message_id) for message_id in message_ids))
+    db.expire_all()
+    recovered = sum(1 for ok in results if ok)
+    return {"attempted": len(message_ids), "recovered": recovered, "still_fallback": len(message_ids) - recovered}
 
 
 def _extract_meetings_once(db: Session, message: Message, extraction: ExtractionResult) -> None:
