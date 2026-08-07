@@ -8,7 +8,7 @@
 // installer. See build_installer.ps1 for how the sidecar binary itself
 // gets built and placed where tauri.conf.json's bundle.externalBin expects
 // it (src-tauri/binaries/mailsort-backend-<target-triple>[.exe]).
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows_subsystem")]
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::sync::Mutex;
 

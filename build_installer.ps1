@@ -31,6 +31,21 @@ function Write-Section($title) {
     Write-Host "==> $title" -ForegroundColor Cyan
 }
 
+# $ErrorActionPreference = "Stop" only turns PowerShell-level errors (a
+# cmdlet throwing, a missing file) into a hard stop — it does NOT do that
+# for an external .exe that runs to completion but exits with a non-zero
+# code, which is exactly how a Rust/npm compile failure reports itself.
+# Without this check, a failed `cargo build` deep inside `npm run tauri
+# build` printed its error and then let the script fall straight through
+# to the "Done" section, which then printed installer paths that were
+# never actually produced — a real failure was reported as success.
+function Invoke-Checked([string]$Description, [scriptblock]$Command) {
+    & $Command
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Description failed (exit code $LASTEXITCODE) — see the output above for the actual error."
+    }
+}
+
 $repoRoot = $PSScriptRoot
 $backendDir = Join-Path $repoRoot "backend"
 $frontendDir = Join-Path $repoRoot "frontend"
@@ -39,17 +54,17 @@ $frontendDir = Join-Path $repoRoot "frontend"
 Write-Section "Backend: setting up a build virtualenv"
 Push-Location $backendDir
 if (-not (Test-Path ".venv")) {
-    python -m venv .venv
+    Invoke-Checked "python -m venv" { python -m venv .venv }
 }
 & .\.venv\Scripts\Activate.ps1
-pip install -e ".[build]"
+Invoke-Checked "pip install" { pip install -e ".[build]" }
 
 Write-Section "Backend: freezing with PyInstaller"
 # --noconfirm overwrites a previous dist/build from an earlier run of this
 # script without an interactive prompt.
-pyinstaller mailsort_backend.spec --noconfirm
+Invoke-Checked "PyInstaller" { pyinstaller mailsort_backend.spec --noconfirm }
 if (-not (Test-Path "dist\mailsort-backend.exe")) {
-    throw "PyInstaller did not produce dist\mailsort-backend.exe — check the output above for errors."
+    throw "PyInstaller reported success but dist\mailsort-backend.exe is missing — check the output above."
 }
 Pop-Location
 
@@ -71,17 +86,27 @@ Write-Host "Copied backend sidecar to $sidecarDest"
 # --- 3. Build the frontend + final installer -------------------------------
 Write-Section "Frontend: installing dependencies"
 Push-Location $frontendDir
-npm install
+Invoke-Checked "npm install" { npm install }
 
 Write-Section "Building the installer (first run can take several minutes — Rust is compiling Tauri itself)"
-npm run tauri build
+Invoke-Checked "npm run tauri build" { npm run tauri build }
 Pop-Location
 
-Write-Section "Done"
+# Confirm the installer(s) this script is about to advertise actually
+# exist, rather than trusting the exit code alone — `tauri build` can
+# report success while only producing a subset of the configured targets
+# on some setups (e.g. missing WiX for msi).
 $bundleDir = Join-Path $frontendDir "src-tauri\target\release\bundle"
-Write-Host "Installer(s) written under: $bundleDir"
-Write-Host "  NSIS:  bundle\nsis\MailSort_<version>_x64-setup.exe"
-Write-Host "  MSI:   bundle\msi\MailSort_<version>_x64_en-US.msi"
+$installers = Get-ChildItem -Path $bundleDir -Recurse -Include "*.exe", "*.msi" -ErrorAction SilentlyContinue
+if (-not $installers) {
+    throw "Build finished but no .exe/.msi installer was found under $bundleDir — check the tauri build output above."
+}
+
+Write-Section "Done"
+Write-Host "Installer(s) written under: $bundleDir" -ForegroundColor Green
+foreach ($installer in $installers) {
+    Write-Host "  $($installer.FullName)" -ForegroundColor Green
+}
 Write-Host ""
 Write-Host "Either of these is the file to hand to an end user — running it installs" -ForegroundColor Green
 Write-Host "MailSort with no separate Python/Node/pip/npm step on their machine." -ForegroundColor Green
