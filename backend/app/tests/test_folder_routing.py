@@ -139,6 +139,94 @@ def test_reroute_classified_messages_fixes_mail_stuck_in_the_wrong_folder_withou
     assert db_session.query(Message).filter(Message.id == message.id).one().folder == "人材"
 
 
+def test_urgent_priority_mail_with_no_more_specific_category_routes_to_important_folder(db_session):
+    """"重要の分類もできていない" — top_category() is a single argmax over
+    categories, so a message tagged both 案件紹介 (0.9) and 重要 (0.6) always
+    routes to 案件, never 重要, no matter how important it also is. priority
+    is a separate, deterministic signal the model produces regardless of
+    which category won — this is the fallback for a message whose category
+    didn't map anywhere more specific but whose priority says it matters."""
+    message = _make_message(db_session, subject="至急ご確認ください", body_text="クレームのご連絡です。")
+    db_session.add(
+        AIAnalysis(
+            message_id=message.id,
+            content_hash="irrelevant",
+            provider_used="local_mock",
+            classification_json=json.dumps(
+                {
+                    "mail_type": "営業メール",
+                    "categories": [{"label": "営業メール", "confidence": 0.8}],
+                    "priority": "urgent",
+                    "reply_required": False,
+                }
+            ),
+            extraction_json="{}",
+        )
+    )
+    db_session.commit()
+
+    moved = analysis_service.reroute_classified_messages(db_session)
+
+    assert moved == 1
+    assert db_session.query(Message).filter(Message.id == message.id).one().folder == "重要"
+
+
+def test_reply_required_still_wins_over_urgent_priority_when_both_are_true(db_session):
+    """reply_required routing is more specific/actionable than the generic
+    重要 catch-all, so it keeps priority when both signals fire on the same
+    message (existing behavior — this locks in that the new priority-based
+    fallback doesn't change it)."""
+    message = _make_message(db_session, subject="至急ご確認ください", body_text="ご確認をお願いします。")
+    db_session.add(
+        AIAnalysis(
+            message_id=message.id,
+            content_hash="irrelevant",
+            provider_used="local_mock",
+            classification_json=json.dumps(
+                {
+                    "mail_type": "営業メール",
+                    "categories": [{"label": "営業メール", "confidence": 0.8}],
+                    "priority": "urgent",
+                    "reply_required": True,
+                }
+            ),
+            extraction_json="{}",
+        )
+    )
+    db_session.commit()
+
+    moved = analysis_service.reroute_classified_messages(db_session)
+
+    assert moved == 1
+    assert db_session.query(Message).filter(Message.id == message.id).one().folder == "要返信"
+
+
+def test_normal_priority_mail_with_no_category_match_is_left_in_inbox(db_session):
+    message = _make_message(db_session, subject="お知らせ", body_text="定期のお知らせです。")
+    db_session.add(
+        AIAnalysis(
+            message_id=message.id,
+            content_hash="irrelevant",
+            provider_used="local_mock",
+            classification_json=json.dumps(
+                {
+                    "mail_type": "営業メール",
+                    "categories": [{"label": "営業メール", "confidence": 0.8}],
+                    "priority": "normal",
+                    "reply_required": False,
+                }
+            ),
+            extraction_json="{}",
+        )
+    )
+    db_session.commit()
+
+    moved = analysis_service.reroute_classified_messages(db_session)
+
+    assert moved == 0
+    assert db_session.query(Message).filter(Message.id == message.id).one().folder == "INBOX"
+
+
 def test_reroute_classified_messages_leaves_correctly_filed_mail_untouched(db_session):
     message = _make_message(db_session, subject="Java案件のご紹介", body_text="Java案件のご紹介です。", folder="案件")
     db_session.add(

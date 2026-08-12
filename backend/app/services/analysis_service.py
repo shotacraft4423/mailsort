@@ -313,6 +313,17 @@ def _route_to_category_folder(db: Session, message: Message, classification: Cla
         target = "人材"
     if target is None and classification.reply_required:
         target = "要返信"
+    # "重要の分類もできていない" — top_category() is a single argmax over
+    # categories, so a message tagged both "案件紹介" (0.9) and "重要" (0.6)
+    # always routes to 案件, never 重要, no matter how important it also is
+    # — categories compete with each other for the one routing decision,
+    # and a more specific type essentially always wins. priority/urgency
+    # is a separate, deterministic signal the model already produces on
+    # every message regardless of which category won, so it's used here as
+    # a fallback: anything urgent/high-priority that didn't already land
+    # somewhere more specific still surfaces in 重要 rather than nowhere.
+    if target is None and classification.priority in ("urgent", "high"):
+        target = "重要"
     if target and target != message.folder:
         message.folder = target
         db.commit()

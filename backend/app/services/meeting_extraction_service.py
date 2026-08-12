@@ -17,15 +17,35 @@ from app.db.models.meeting import Meeting
 from app.schemas.extraction import ExtractionResult
 
 _LINK_PATTERNS = {
-    "teams": re.compile(r"https://teams\.microsoft\.com/l/meetup-join/\S+"),
-    "zoom": re.compile(r"https://[\w.-]*zoom\.us/j/\S+"),
+    # "会議情報を拾い切れていないときがある" — these only ever matched the
+    # single most common URL shape for each platform (old-style Teams
+    # meetup-join links, zoom.us/j/ join links only). Real invites also use
+    # /l/meeting/ (Teams' newer scheduled-meeting links), teams.live.com
+    # (Teams Free/personal), and Zoom's /w/ (webinar) and /my/ (personal
+    # room) paths — any of those fell through to no match at all, and since
+    # extract_meetings() only creates a Meeting row when it finds a URL,
+    # the whole meeting silently never showed up anywhere, not just its
+    # date/time.
+    "teams": re.compile(r"https://teams\.microsoft\.com/l/(?:meetup-join|meeting)/\S+|https://teams\.live\.com/meet/\S+"),
+    "zoom": re.compile(r"https://[\w.-]*zoom\.us/(?:j|w|my)/\S+"),
     "meet": re.compile(r"https://meet\.google\.com/\S+"),
 }
 
-# "2026年8月6日" / "2026/8/6" / "8月6日" (year optional — defaults to this
-# year, since reminder mail like TimeRex's rarely spells it out for
-# same-year meetings).
-_DATE_RE = re.compile(r"(?:(\d{4})[年/])?(\d{1,2})月?/?(\d{1,2})日")
+# "2026年8月6日" / "2026/8/6" / "8月6日" / "8/6" / "8/6(木)" (year optional —
+# defaults to this year, since reminder mail like TimeRex's rarely spells
+# it out for same-year meetings). This used to be a single pattern
+# requiring a literal "日" at the end unconditionally
+# ((?:(\d{4})[年/])?(\d{1,2})月?/?(\d{1,2})日) — despite this comment always
+# claiming "2026/8/6" was supported, that slash-only notation (extremely
+# common in casual invites and auto-generated meeting reminders) has no
+# trailing 日 at all and never actually matched, so those meetings' dates
+# silently stayed 日時未確定 no matter how explicit the email was. Two
+# separate alternatives now: the kanji form still requires 月/日, the
+# slash form doesn't require either.
+_DATE_RE = re.compile(
+    r"(?:(?P<kanji_year>\d{4})年)?(?P<kanji_month>\d{1,2})月(?P<kanji_day>\d{1,2})日"
+    r"|(?:(?P<slash_year>\d{4})/)?(?P<slash_month>\d{1,2})/(?P<slash_day>\d{1,2})"
+)
 # "11:00 - 12:00" / "11:00〜12:00" / "11:00" alone.
 _TIME_RANGE_RE = re.compile(r"(\d{1,2}):(\d{2})(?:\s*[〜~\-−]\s*(\d{1,2}):(\d{2}))?")
 
@@ -44,7 +64,11 @@ def _parse_meeting_datetime(text: str) -> tuple[datetime | None, datetime | None
     date_match = _DATE_RE.search(text)
     if not date_match:
         return None, None
-    year_str, month_str, day_str = date_match.groups()
+    groups = date_match.groupdict()
+    if groups["kanji_month"] is not None:
+        year_str, month_str, day_str = groups["kanji_year"], groups["kanji_month"], groups["kanji_day"]
+    else:
+        year_str, month_str, day_str = groups["slash_year"], groups["slash_month"], groups["slash_day"]
     year = int(year_str) if year_str else datetime.now().year
     month, day = int(month_str), int(day_str)
 
