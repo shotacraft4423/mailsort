@@ -79,3 +79,46 @@ def test_build_few_shot_suffix_mentions_original_and_corrected_labels(db_session
     feedback = feedback_service.record_correction(db_session, message, "契約")
     suffix = feedback_service.build_few_shot_suffix([feedback])
     assert "契約" in suffix
+
+
+def test_record_reply_not_needed_patches_existing_classification_and_drops_reply_required(db_session):
+    """"返信忘れのところは返信不要ボタンを追加してそれらを学習してください" —
+    marking a message as not needing a reply must immediately flip
+    reply_required to False on its cached classification (so it drops off
+    the dashboard's overdue-reply reminder without waiting for a
+    re-classify) and be recorded for future few-shot learning."""
+    message = _message(db_session, "ご確認お願いします", "ご確認をお願いいたします。")
+    analysis = AIAnalysis(
+        message_id=message.id,
+        content_hash="x",
+        provider_used="local_mock",
+        classification_json=json.dumps({"mail_type": "営業メール", "reply_required": True}),
+    )
+    db_session.add(analysis)
+    db_session.commit()
+
+    feedback_service.record_reply_not_needed(db_session, message, note="定型の御礼メールだった")
+
+    db_session.refresh(analysis)
+    data = json.loads(analysis.classification_json)
+    assert data["reply_required"] is False
+    assert "ユーザー修正" in data["rationale"]
+
+    stored = db_session.query(ClassificationFeedback).filter(ClassificationFeedback.message_id == message.id).one()
+    assert stored.original_reply_required is True
+    assert stored.corrected_reply_required is False
+    assert stored.corrected_mail_type is None
+
+
+def test_record_reply_not_needed_without_existing_analysis_still_stores_feedback(db_session):
+    message = _message(db_session, "件名", "本文")
+    feedback = feedback_service.record_reply_not_needed(db_session, message)
+    assert feedback.original_reply_required is None
+    assert feedback.corrected_reply_required is False
+
+
+def test_build_few_shot_suffix_mentions_reply_required_corrections(db_session):
+    message = _message(db_session, "ご確認お願いします", "ご確認をお願いいたします。")
+    feedback = feedback_service.record_reply_not_needed(db_session, message)
+    suffix = feedback_service.build_few_shot_suffix([feedback])
+    assert "返信不要" in suffix

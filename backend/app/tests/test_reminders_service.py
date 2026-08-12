@@ -7,6 +7,7 @@ from app.db.models.ai import AIAnalysis
 from app.db.models.deal import Deal
 from app.db.models.email import EmailAccount, Message, Thread
 from app.db.models.meeting import Meeting
+from app.services import feedback_service
 from app.services.insights_service import compute_reminders
 
 
@@ -42,6 +43,38 @@ def test_overdue_reply_required_message_with_no_reply_is_flagged(db_session):
     assert len(reminders.overdue_replies) == 1
     assert reminders.overdue_replies[0].message_id == message.id
     assert reminders.overdue_replies[0].hours_overdue > 0
+
+
+def test_message_marked_reply_not_needed_drops_off_the_overdue_list(db_session):
+    """"返信忘れのところは返信不要ボタンを追加してそれらを学習してください" —
+    once a user marks a reminder as not needing a reply,
+    feedback_service.record_reply_not_needed flips reply_required to False
+    on the cached classification, and compute_reminders must stop flagging
+    it without any re-classify."""
+    account = _account(db_session)
+    message = Message(
+        account_id=account.id,
+        message_uid="1",
+        subject="ご確認お願いします",
+        sender_address="vendor@example.com",
+        received_at=datetime.utcnow() - timedelta(hours=48),
+    )
+    db_session.add(message)
+    db_session.flush()
+    db_session.add(
+        AIAnalysis(
+            message_id=message.id,
+            content_hash="x",
+            provider_used="local_mock",
+            classification_json=json.dumps({"reply_required": True}),
+        )
+    )
+    db_session.commit()
+    assert len(compute_reminders(db_session, overdue_reply_hours=24).overdue_replies) == 1
+
+    feedback_service.record_reply_not_needed(db_session, message)
+
+    assert compute_reminders(db_session, overdue_reply_hours=24).overdue_replies == []
 
 
 def test_message_already_replied_to_is_not_overdue(db_session):

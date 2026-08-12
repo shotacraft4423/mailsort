@@ -14,6 +14,7 @@ export function DashboardView({ onSelectMessage }: Props) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [reminders, setReminders] = useState<RemindersData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [markingId, setMarkingId] = useState<string | null>(null);
 
   useEffect(() => {
     api
@@ -22,6 +23,24 @@ export function DashboardView({ onSelectMessage }: Props) {
       .catch(() => setError(t("dashboard.fetchError")));
     api.reminders().then(setReminders).catch(() => setReminders(null));
   }, []);
+
+  const handleReplyNotNeeded = async (messageId: string) => {
+    setMarkingId(messageId);
+    try {
+      await api.markReplyNotNeeded(messageId);
+      setReminders((prev) =>
+        prev
+          ? {
+              ...prev,
+              overdue_replies: prev.overdue_replies.filter((r) => r.message_id !== messageId),
+              recommended_actions: prev.recommended_actions.filter((a) => !(a.kind === "reply" && a.ref_id === messageId)),
+            }
+          : prev
+      );
+    } finally {
+      setMarkingId(null);
+    }
+  };
 
   if (error) return <div className="view-container">{error}</div>;
   if (!data) return <div className="view-container">{t("common.loading")}</div>;
@@ -93,11 +112,24 @@ export function DashboardView({ onSelectMessage }: Props) {
             ) : (
               <ul className="reminder-list">
                 {reminders.overdue_replies.map((r) => (
-                  <li key={r.message_id} className="clickable" onClick={() => onSelectMessage(r.message_id)}>
-                    <strong>{r.subject || t("common.noSubject")}</strong>
-                    <span className="related-list-meta">
-                      {t("dashboard.hoursOverdue", { sender: r.sender_address, hours: Math.round(r.hours_overdue) })}
-                    </span>
+                  <li key={r.message_id} className="clickable reminder-item" onClick={() => onSelectMessage(r.message_id)}>
+                    <div>
+                      <strong>{r.subject || t("common.noSubject")}</strong>
+                      <span className="related-list-meta">
+                        {t("dashboard.hoursOverdue", { sender: r.sender_address, hours: Math.round(r.hours_overdue) })}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="reply-not-needed-btn"
+                      disabled={markingId === r.message_id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleReplyNotNeeded(r.message_id);
+                      }}
+                    >
+                      {t("dashboard.replyNotNeeded")}
+                    </button>
                   </li>
                 ))}
               </ul>

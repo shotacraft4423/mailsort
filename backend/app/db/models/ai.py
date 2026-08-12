@@ -120,7 +120,11 @@ class ClassificationFeedback(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     message_id: Mapped[str] = mapped_column(String(36), ForeignKey("messages.id"), index=True)
     fingerprint_text: Mapped[str] = mapped_column(Text)  # subject + body snippet, used for similarity search
     original_mail_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    corrected_mail_type: Mapped[str] = mapped_column(String(64))
+    # Nullable because a correction can be about mail_type, reply_required, or
+    # (in principle) both — a "返信不要" correction has no mail_type at all.
+    corrected_mail_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    original_reply_required: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    corrected_reply_required: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     note: Mapped[str] = mapped_column(Text, default="")
 
 

@@ -414,6 +414,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ corrected_mail_type: correctedMailType, note }),
     }),
+  markReplyNotNeeded: (id: string, note = "") =>
+    request<{ id: string }>(`/ai/messages/${id}/mark-reply-not-needed`, {
+      method: "POST",
+      body: JSON.stringify({ note }),
+    }),
   rerouteFolders: () => request<{ moved: number }>("/ai/reroute-folders", { method: "POST" }),
   reclassifyFallback: (folder?: string, accountId?: string) =>
     request<{ attempted: number; recovered: number; still_fallback: number }>(

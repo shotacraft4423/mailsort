@@ -127,6 +127,21 @@ def correct_classification(message_id: str, payload: CorrectClassificationReques
     return {"id": feedback.id, "corrected_mail_type": feedback.corrected_mail_type}
 
 
+class MarkReplyNotNeededRequest(BaseModel):
+    note: str = ""
+
+
+@router.post("/messages/{message_id}/mark-reply-not-needed")
+def mark_reply_not_needed(message_id: str, payload: MarkReplyNotNeededRequest, db: Session = Depends(get_db)) -> dict:
+    """"返信不要ボタン" — corrects reply_required=False on the message's
+    current classification immediately (dropping it off the dashboard's
+    overdue-reply reminder) and records it as a few-shot example, mirroring
+    correct_classification()'s pattern for mail_type corrections."""
+    message = _get_message(db, message_id)
+    feedback = feedback_service.record_reply_not_needed(db, message, note=payload.note)
+    return {"id": feedback.id}
+
+
 @router.get("/reply-tones")
 def reply_tones() -> list[str]:
     return reply_suggestion_service.TONES

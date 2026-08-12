@@ -705,6 +705,34 @@ a:focus-visible {
   cursor: pointer;
 }
 
+.reminder-list li.reminder-item {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.reply-not-needed-btn {
+  flex-shrink: 0;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-secondary, inherit);
+  cursor: pointer;
+}
+
+.reply-not-needed-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.reply-not-needed-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .recommended-actions li.clickable:hover,
 .reminder-list li.clickable:hover {
   border-color: var(--accent);
